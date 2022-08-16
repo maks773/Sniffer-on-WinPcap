@@ -1,317 +1,195 @@
-#include <conio.h>
-#include <iostream>
-#include <iomanip>
-#include <Winsock2.h>
-#include <WS2tcpip.h>
-#include <string>
-#include <vector>
-#include <windows.h>
-#include <bitset>
-#include <Mstcpip.h>
-#include <fstream>
 #include "sniffer.h"
 using namespace std;
 
-#pragma comment(lib, "Ws2_32.lib")
 
-void ShowIPHeaderInfo(IPHeader* iph)    // вывод информации из заголовка IP
+int main(int argc, char *argv[])                  // основной код программы
 {
-	cout << "----------- IP Header Information -----------" << endl << endl;
-	cout << "Version: " << (UINT)(iph->ip_ver_hlen >> 4) << endl;
-	cout << "Header Length: " << dec << (UINT)((iph->ip_ver_hlen & 15)*4) << endl;
-	cout << "ToS: " << bitset<8>(iph->ip_tos) << endl;
-	cout << "Total Length: " << dec << ntohs(iph->ip_length) << endl;
-	cout << "Identification: " << dec << ntohs(iph->ip_id) << endl;
-	cout << "Flags: " << endl;
-	bitset<3> flags(ntohs(iph->ip_flag_offset) >> 13);
-	cout << "\tReserved bit:   " << flags[2] << endl;
-	cout << "\tDon't fragment: " << flags[1] << endl;
-	cout << "\tMore fragments: " << flags[0] << endl;
-	cout << "Fragment Offset: " << dec << (ntohs(iph->ip_flag_offset) & 8191) << endl;
-	cout << "TTL: " << dec << (UINT)iph->ip_ttl << endl;
-	cout << "Protocol: ";
-
-	switch(iph->ip_protocol){
-		case IPPROTO_TCP:
-			cout << "TCP" << endl;
-			break;
-		case IPPROTO_UDP:
-			cout << "UDP" << endl;
-			break;
-		default:
-			cout << "Unknown" << endl;
-	}
-
-	cout << "Header Checksum: 0x"  << hex << ntohs(iph->ip_crc) << endl;
-	in_addr ipaddr; char buf_ip[20];
-	ipaddr.s_addr = iph->ip_src_addr;
-	cout << "Source: " << inet_ntop(AF_INET, &ipaddr, buf_ip, 16) << endl;
-	ipaddr.s_addr = iph->ip_dst_addr;
-	cout << "Destination: " << inet_ntop(AF_INET, &ipaddr, buf_ip, 16) << endl << endl;
-}
-
-void ShowTCPHeaderInfo(TCPHeader* tcph)    // вывод информации из заголовка TCP
-{
-	cout << "----------- TCP Header Information -----------" << endl << endl;
-	cout << "Source Port: " << dec << ntohs(tcph->tcp_srcport) << endl;
-	cout << "Destination Port: " << dec << ntohs(tcph->tcp_dstport) << endl;
-	cout << "Sequence Number: " << dec << ntohl(tcph->tcp_seq) << endl;
-	cout << "Acknowledgment Number: " << dec << ntohl(tcph->tcp_ack) << endl;
-	cout << "Header Length: " << dec << (UINT)((ntohs(tcph->tcp_hlen_flags) >> 12)*4) << endl;
-	cout << "Flags: " << endl;
-	bitset<6> flags(ntohs(tcph->tcp_hlen_flags) & 63);
-	cout << "\tUrgent:          " << flags[5] << endl;
-	cout << "\tAcknowledgement: " << flags[4] << endl;
-	cout << "\tPush:            " << flags[3] << endl;
-	cout << "\tReset:           " << flags[2] << endl;
-	cout << "\tSyn:             " << flags[1] << endl;
-	cout << "\tFin:             " << flags[0] << endl;
-	cout << "Window Size: " << dec << ntohs(tcph->tcp_window) << endl;
-	cout << "Checksum: 0x" << hex << ntohs(tcph->tcp_crc) << endl;
-	cout << "Urgent Pointer: " << dec << ntohs(tcph->tcp_urg_pointer) << endl << endl;
-}
-
-void ShowUDPHeaderInfo(UDPHeader* udph)    // вывод информации из заголовка UDP
-{
-	cout << "----------- UDP Header Information -----------" << endl << endl;
-	cout << "Source Port: " << dec << ntohs(udph->udp_srcport) << endl;
-	cout << "Destination Port: " << dec << ntohs(udph->udp_dstport) << endl;
-	cout << "Length: " << dec << ntohs(udph->udp_length) << endl;
-	cout << "Checksum: 0x" << hex << ntohs(udph->udp_xsum) << endl << endl;
-}
-
-void ShowPacketData(IPHeader* iph, vector<BYTE> &Buffer)  // печать IP пакета в формате hex и ASCII
-{
-	cout << "--------------- IP packet data ----------------" << endl << endl;
-	int ip_len = ntohs(iph->ip_length);
-	int added = 16 - ip_len%16;
-	for(int j=0; j<(ip_len + added); j++) {
-		if (j >= ip_len)
-		  printf("   ");
-		else
-		if (Buffer[j]<=15)
-		  printf("0%X ", Buffer[j]);
-		else
-		  printf("%X ", Buffer[j]);
-
-		if ((j+1)%16 ==0 && j!=0) {
-		  printf("\t\t");
-		  for (int z = j-15; z<=j; z++)
-			if ((Buffer[z] < 32 || Buffer[z] > 126) && (z < ip_len))
-			   printf(".");
-			else
-			   printf("%c", Buffer[z]);
-		  printf("\n\n");
-		}
-	}
-}
-
-void print_info(int count, IPHeader* iph, TCPHeader* tcph, UDPHeader* udph, string &str)
-{
-	in_addr ipaddr; char buf_ip[20];	
-
-	if (count == 1) {
-		cout << "#    " << "src_ip           " << "dst_ip           " << "protocol   ";
-	    cout << "src_port    " << "dst_port    " << "Process                          " << endl;
-	}
-
-	ipaddr.s_addr = iph->ip_src_addr;
-	inet_ntop(AF_INET, &ipaddr, buf_ip, 16);
-	cout << left << setw(5) << count << left << setw(17) << buf_ip;
-
-	ipaddr.s_addr = iph->ip_dst_addr;
-	inet_ntop(AF_INET, &ipaddr, buf_ip, 16);
-	cout << left << setw(17) << buf_ip;
-
-	if (iph->ip_protocol == IPPROTO_TCP)
-		cout << left << setw(11) << "TCP" << setw(12) << ntohs(tcph->tcp_srcport) << setw(12) << ntohs(tcph->tcp_dstport); else
-	if (iph->ip_protocol == IPPROTO_UDP)
-		cout << left << setw(11) << "UDP" << setw(12) << ntohs(udph->udp_srcport) << setw(12) << ntohs(udph->udp_dstport);
+	int err;                                      // хранит значение, возвращаемое функциями (код ошибки) 
 	
-	str.erase(0, 1);
-	if (str[0] == '[' || str[0] == ' ') str.erase(0, 1);
-	if (!str.empty() && str.back() == ']') str.pop_back();
-	cout << left << setw(34) << str << endl;	
-}
+	err = WSAStartup(MAKEWORD(2,2), &wsData);     // инициализация интерфейса сокетов с заданной версией
+	if (err != 0) 
+		error_exit(1);		
 
-void print_packet(int count, IPHeader* iph, TCPHeader* tcph, UDPHeader* udph, string& str, vector<BYTE>& Buffer)
-{
-	cout << "---------------- Packet # " << int(count) << " -----------------" << endl << endl;
-	str.erase(0, 1);
-	if (str[0] == '[' || str[0] == ' ') str.erase(0, 1);
-	if (!str.empty() && str.back() == ']') str.pop_back();
-	cout << "Packet acssociated with the process: " << str << endl << endl;
-	ShowIPHeaderInfo(iph);
-	if (iph->ip_protocol == IPPROTO_TCP)
-		ShowTCPHeaderInfo(tcph); else
-	if (iph->ip_protocol == IPPROTO_UDP)
-		ShowUDPHeaderInfo(udph);
-	ShowPacketData(iph, Buffer);
-	cout << "\n\n\n\n";
-}
+	s = socket(AF_INET, SOCK_RAW, 0);             // инициализация сокета
+	if (s == INVALID_SOCKET) 
+		error_exit(2);
 
-int main(int argc, char *argv[])
-{
-	WSADATA wsData;
-	int err;
-
-	HANDLE hInput = GetStdHandle(STD_INPUT_HANDLE);    //отключаем режим быстрого редактирования в консоли
-	DWORD prevConsoleMode;  
-	GetConsoleMode(hInput, &prevConsoleMode);
-	SetConsoleMode(hInput, prevConsoleMode & ENABLE_EXTENDED_FLAGS);
-	
-	err = WSAStartup(MAKEWORD(2,2), &wsData);
-	if (err != 0) {
-		cout << endl << "Error WinSock version initialization: #" << WSAGetLastError() << endl;
-		system("pause");
-		exit(1);
-	}
-
-	SOCKET s = socket(AF_INET, SOCK_RAW, 0);
-	if (s == INVALID_SOCKET) {
-		cout << endl << "Error socket initialization: #" << WSAGetLastError() << endl;
-		closesocket(s);
-		WSACleanup();
-		system("pause");
-		exit(2);
-	}
-
-	char host_buf[256];
+	char host_buf[256];                           // для хранения имени хоста
 	addrinfo hints = {}, *addrs, *addr;
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_RAW;
 	hints.ai_protocol = IPPROTO_IP;
 
-	err = gethostname(host_buf, sizeof(host_buf));
-	if (err == -1) {
-		perror("\nError get the hostname: #");
-		closesocket(s);
-		WSACleanup();
-		system("pause");
-		exit(3);
-	}
+	err = gethostname(host_buf, sizeof(host_buf));    // получение имени хоста
+	if (err == -1) 
+		error_exit(3);
 
-	err = getaddrinfo(host_buf, 0, &hints, &addrs);
-	if (err != 0)  {
-		cout << endl << "Error get the list of IP-adresses: #" << gai_strerror(err) << endl;
-		closesocket(s);
-		WSACleanup();
-		system("pause");
-		exit(4);
-	}
+	err = getaddrinfo(host_buf, 0, &hints, &addrs);   // получение IP-адресов сетевых интерфейсов ОС
+	if (err != 0)  		
 	
 	cout << "Select the interface to capture:" << endl << endl;
 	
-	char count = '1';
-	vector<sockaddr *> ip(10);	
+	char count = '1';                                 // вывод перечня IP-адресов в консоль 
+	vector<sockaddr *> ip(100);	
 	for (addr = addrs; addr != NULL; addr = addr->ai_next) {
 		ip[count - '0'] = addr->ai_addr; char buf_ip[20];
-		cout << count << ". " << inet_ntop(AF_INET, &((sockaddr_in*)ip[count - '0'])->sin_addr, buf_ip, 16) << endl;
+		cout << count << ". " << inet_ntop(AF_INET, &((sockaddr_in*)ip[count - '0'])->sin_addr,
+																						buf_ip, 16) << endl;
 		count++;
 	}
 	
 	char num;
     cout << endl << "Please, enter the number of interface: ";
-	do
+	do                                               // выбор номера интерфейса
 	{   
 		num = _getche();
 	}   while (num >= count || num < '1');
 
-	err = bind(s, ip[num - '0'], sizeof(sockaddr));
-	if (err != 0)  {
-		cout << endl << "Error socket binding: #" << WSAGetLastError() << endl;
-		closesocket(s);
-		WSACleanup();
-		system("pause");
-		exit(5);
-	}
+	err = bind(s, ip[num - '0'], sizeof(sockaddr));  // привязка сокета к выбранному интерфейсу
+	if (err != 0)  
+		error_exit(5);		
 	
 	freeaddrinfo(addrs);
 
-	ULONG flag = RCVALL_ON; ULONG z = 0;
+	ULONG flag = RCVALL_ON; ULONG z = 0;             // переключаем сетевой интерфейс в неразборчивый режим
 	err = WSAIoctl(s, SIO_RCVALL, &flag, sizeof(flag), NULL, 0, &z, NULL, NULL);
-	if (err == SOCKET_ERROR) {
-		cout << endl << "Error WSAIoctl function: #" << WSAGetLastError() << endl;
-		closesocket(s);
-		WSACleanup();
-		system("pause");
-		exit(6);
-	}
+	if (err == SOCKET_ERROR) 
+		error_exit(6);		
 
-	cout << "\n\n\n\n" << "1. Full print (IP, TCP/UDP headers + Packet Data)" << endl;
-	cout << "2. Short print in single-line format" << endl << endl;
-	cout << "Please, select the print packet mode: ";
+	wstring enter_procname = L"NULL";
+	cout << "\n\n\n\n" << "Use process filtering? (y/n): ";
 	do
 	{
 		num = _getche();
-	} while (num != '1' && num != '2');
-	
-	int p_count = 0;
-	cout << "\n\n\n\n" << "Start packet capture...  [ TO STOP capture PRESS ANY KEY ]" << endl << endl;
+	} while (num != 'y' && num != 'n');             // захват пакетов по определённому процессу (y) или нет (n)
 
-	while( !_kbhit() ) //захват пакетов
+	if (num == 'y') {
+		cout << endl << "Please, enter name of the process (for example, chrome.exe): ";
+		getline(wcin, enter_procname);		        // если (y), считываем с консоли имя процесса
+	}                                               // оно должно быть точь-в-точь, как в выводе netstat
+
+	HANDLE hInput = GetStdHandle(STD_INPUT_HANDLE);    // отключаем режим быстрого редактирования в консоли
+	DWORD prevConsoleMode;
+	GetConsoleMode(hInput, &prevConsoleMode);
+	SetConsoleMode(hInput, prevConsoleMode & ENABLE_EXTENDED_FLAGS);
+
+	cout << "\n\n\n\n" << "1. Full print (IP, TCP/UDP headers + Packet Data)" << endl;
+	cout << "2. Short print in single-line format" << endl;
+	cout << "3. Quiet mode. Only write to pcap file" << endl << endl;
+	cout << "Please, select the mode: ";
+	do
 	{
-		vector<BYTE> Buffer(65535);	 string port_src, port_dst;
-		IPHeader* iph = NULL;  TCPHeader* tcph = NULL;  UDPHeader* udph = NULL;
-		in_addr ipaddr; string src_ip, dst_ip, proto;
+		num = _getche();
+	} while (num != '1' && num != '2' && num != '3');   // выбор режима работы программы
+	
+	int p_count = 0;                                    // счётчик количества записанных пакетов
+	HANDLE hFile = NULL;                                // хэндл для pcap-файла
+	vector<temp_buf> Temp(65535);                       // для хранения пакетов между DNS-запросом и ответом
+	vector<vector<BYTE>> Buf(65535);
+	int t = 0;                                          // счётчик пакетов между DNS-запросом и ответом
+	flag = 100;                                         // 100 - начальное состояние флага
 
- 		int byte_rcv = recvfrom(s, (char*)&Buffer[0], (int)Buffer.size(), 0, NULL, 0);
+	writehead_to_pcap(hFile);                           // запись глобального заголовка в pcap-файл
+
+	cout << "\n\n" << "Start packet capture...  [ TO STOP capture PRESS ANY KEY ]" << "\n\n";	
+
+	while( !_kbhit() ) // начинаем захват пакетов
+	{
+		vector<BYTE> Buffer(65535);                     // буфер для хранения захваченного пакета
+		IPHeader* iph = NULL;  TCPHeader* tcph = NULL;  UDPHeader* udph = NULL;
+		wstring process_name = L"Unknown process";      // для хранения имени процесса
+
+ 		int byte_rcv = recvfrom(s, (char*)&Buffer[0], (int)Buffer.size(), 0, NULL, 0); // получаем пакет из сети
 		if (byte_rcv >= sizeof(IPHeader))
 		{
-			iph = (IPHeader *)&Buffer[0];
-			UINT ip_hlen = (UINT)((iph->ip_ver_hlen & 15)*4);
+			iph = (IPHeader *)&Buffer[0];                        // выделяем заголовок IP
+			UINT ip_hlen = (UINT)((iph->ip_ver_hlen & 15)*4);    // длина IP-заголовка
+			
+			if (iph->ip_protocol == IPPROTO_TCP) {
+				tcph = (TCPHeader*)(&Buffer[0] + ip_hlen);       // выделяем заголовок TCP
+				process_name = GetTcpProcessName(iph, tcph, enter_procname); // ищем связь пакета с процессом в ОС
+			}
+			else if (iph->ip_protocol == IPPROTO_UDP) {
+				udph = (UDPHeader*)(&Buffer[0] + ip_hlen);       // выделяем заголовок UDP
+				process_name = GetUdpProcessName(iph, udph, enter_procname); // ищем связь пакета с процессом в ОС 
+			}
+			else
+				continue;
 
-			ipaddr.s_addr = iph->ip_src_addr;
-			src_ip = inet_ntop(AF_INET, &ipaddr, (char*)(src_ip.c_str()), 16);
-			ipaddr.s_addr = iph->ip_dst_addr;
-			dst_ip = inet_ntop(AF_INET, &ipaddr, (char*)dst_ip.c_str(), 16);
-			src_ip.push_back(':'); dst_ip.push_back(':');
+			int is_dns = isDNS(tcph, udph);       // проверка, относится пакет к DNS (0,1) или нет (2)               
+			
+			if (is_dns == 2 && flag == 1) {       // обработка пакета после dns-ответа
+				string buf_ip(16, '\0');  vector<int> temp_ip(4, 0);  int nn = 0;  string temp;
+				inet_ntop(AF_INET, &iph->ip_dst_addr, (char*)buf_ip.c_str(), 16);				
+				stringstream stream(buf_ip);
 
-			if(iph->ip_protocol == IPPROTO_TCP) {
-				tcph = (TCPHeader *)(&Buffer[0] + ip_hlen);				
-				port_src = to_string(ntohs(tcph->tcp_srcport));
-				port_dst = to_string(ntohs(tcph->tcp_dstport));
-				proto = "TCP";
-			} else
+				while (getline(stream, temp, '.')) {
+					temp_ip[nn] = stoi(temp);    // перевод IP-адреса назначния в формат массива из четырёх чисел
+					nn++;
+				}
 
-			if(iph->ip_protocol == IPPROTO_UDP) {
-				udph = (UDPHeader *)(&Buffer[0] + ip_hlen);				
-				port_src = to_string(ntohs(udph->udp_srcport));
-				port_dst = to_string(ntohs(udph->udp_dstport));
-				proto = "UDP";
+				vector<int> int_pack(65535);	 // перевод пакета в формат кодов символов (int)		
+				for (nn = 0; nn < 65535; nn++) int_pack[nn] = Buf[t - 1][nn];
+
+				// поиск IP адреса назначния TCP пакета в DNS-ответе (так как после DNS-ответа
+				// идёт пакет TCP c установкой соединения по одному из полученных адресов)
+				auto it = search(int_pack.begin(), int_pack.end(), temp_ip.begin(), temp_ip.end());
+				if (it != int_pack.end() && process_name != L"NULL") {
+					for (int i = 0; i < t; i++) { // если адрес найден и TCP-пакет связан с процессом, то выводим
+						p_count++;                // захваченные DNS-ответ, запрос и пакеты между ними,
+						                          // так как DNS-пакеты тоже связаны с этим процессом
+						if (num == '2')
+							print_info(p_count, &Temp[i].ipheader, &Temp[i].tcpheader,
+								&Temp[i].udpheader, process_name);
+						else
+							if (num == '1')
+								print_packet(p_count, &Temp[i].ipheader,
+									&Temp[i].tcpheader, &Temp[i].udpheader, process_name, Buf[i]);
+
+						writepack_to_pcap(hFile, Buf[i], ntohs(Temp[i].ipheader.ip_length), process_name);						
+					}
+					t = 0; flag = 100;    // обнуляем счётчик и ставим флаг в начальое состояние
+				}
+				else {
+					t = 0; flag = 100;
+					continue;             // иначе переходим к захвату пакетов без вывода сохранённых
+				}
+			}
+			
+			if (is_dns != 2 || flag == 0) {	 // сохраняем пакеты между DNS-запросом и DNS-ответом			
+				Temp[t].ipheader = *iph;
+				if (udph != NULL)
+					Temp[t].udpheader = *udph;
+				else
+					Temp[t].tcpheader = *tcph;
+				Buf[t] = Buffer;  t++;
+				if (is_dns == 0)             // DNS-запрос
+					flag = 0;
+				else if (is_dns == 1)        // DNS-ответ
+						flag = 1;				
+				continue;
 			}
 
-			FILE* p = _popen("netstat -nab", "r");
-			string str = "";
-			ifstream a(p);
 
-			if (iph->ip_protocol == IPPROTO_TCP || iph->ip_protocol == IPPROTO_UDP)
-			 while (getline(a, str)) {				
-				size_t pos1 = str.find(src_ip+port_src);
-				size_t pos2 = str.find(dst_ip+port_dst);				
-				size_t pos3 = str.find(proto);
-				if ((pos1 != string::npos || pos2 != string::npos) && pos3 != string::npos)  {
-					p_count++;
-
-					do					
-						getline(a, str);						
-					while (str.substr(2, 3) == proto);
-											
-					if (num == '2')
-						print_info(p_count, iph, tcph, udph, str); else
+			if (process_name != L"NULL") {  // если захваченный пакет связан с процессом, выводим его
+				p_count++;
+				if (num == '2')
+					print_info(p_count, iph, tcph, udph, process_name);
+				else
 					if (num == '1')
-						print_packet(p_count, iph, tcph, udph, str, Buffer);
-					break;
-				}
-			 }			
-			_pclose(p);
+							print_packet(p_count, iph, tcph, udph, process_name, Buffer);
+
+				writepack_to_pcap(hFile, Buffer, ntohs(iph->ip_length), process_name);
+			}			
 		}
 	}
 
-	cout << "\n\nPacket capture completed!\n\n";
-	SetConsoleMode(hInput, prevConsoleMode); //возврат прежних настроек консоли
+	cout << "\n\nPacket capture completed!\n\n";	
+	SetConsoleMode(hInput, prevConsoleMode); // возврат прежних настроек консоли
+	CloseHandle(hInput);
+	CloseHandle(hFile);
 	closesocket(s);
-	WSACleanup();
+	WSACleanup();	
 	system("pause");
 	return 0;
 }
