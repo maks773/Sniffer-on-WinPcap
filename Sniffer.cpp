@@ -190,6 +190,6 @@ int main(int argc, char *argv[])                  // основной код программы
 	CloseHandle(hFile);
 	closesocket(s);
 	WSACleanup();	
-	system("pause");
+	cin.get();
 	return 0;
 }
