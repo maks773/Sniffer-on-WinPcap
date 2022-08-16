@@ -2,7 +2,7 @@
 using namespace std;
 
 
-int main(int argc, char *argv[])                  // основной код программы
+int main()                                        // основной код программы
 {
 	int err;                                      // хранит значение, возвращаемое функциями (код ошибки) 
 	
@@ -190,6 +190,6 @@ int main(int argc, char *argv[])                  // основной код программы
 	CloseHandle(hFile);
 	closesocket(s);
 	WSACleanup();	
-	cin.get();
+	while (true) cin.get();
 	return 0;
 }

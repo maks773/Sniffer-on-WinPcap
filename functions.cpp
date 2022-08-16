@@ -30,7 +30,7 @@ void error_exit(int code)
 
 	closesocket(s);
 	WSACleanup();
-	cin.get();
+	while (true) cin.get();
 	exit(code);
 }
 
