@@ -2,34 +2,24 @@
 using namespace std;
 
 
-WSADATA wsData;
-SOCKET s;
-wstring previous_name;
+wstring previous_name = L"Unknown process";      // для хранения имени процесса предыдущего пакета
+
+
+                        // описание функций из заголовочного файла Sniffer.h
 
 
 void error_exit(int code)
 {
 	switch (code)
 	{
-	case 1:  cout << "\nError WinSock version initialization: #" << WSAGetLastError() << endl; break;
-	case 2:  cout << "\nError socket initialization: #" << WSAGetLastError() << endl; break;
-	case 3:  cout << "\nError get the hostname: #" << GetLastError() << endl; break;
-	case 4:  cout << "\nError get the list of IP-adresses: #" << GetLastError() << endl; break;
-	case 5:  cout << "\nError socket binding: #" << WSAGetLastError() << endl; break;
-	case 6:  cout << "\nError WSAIoctl function: #" << WSAGetLastError() << endl; break;
-	case 7:	 cout << "\nError memory allocation: #" << GetLastError() << endl; break;
-	case 8:  cout << "\nError GetExtendedTcpTable: #" << GetLastError() << endl; break;
-	case 9:  cout << "\nError GetExtendedUdpTable: #" << GetLastError() << endl; break;
-	case 10: cout << "\nError create pcap file: #" << GetLastError() << endl; break;
-	case 11: cout << "\nError write global header to pcap file: #" << GetLastError() << endl; break;
-	case 12: cout << "\nError write packet header to pcap file: #" << GetLastError() << endl; break;
-	case 13: cout << "\nError write fakeeth to pcap file: #" << GetLastError() << endl; break;
-	case 14: cout << "\nError write packet data to pcap file: #" << GetLastError() << endl; break;
-	case 15: cout << "\nError write process name to pcap file: #" << GetLastError() << endl; break;
+	case 1:  cout << "\nError get interfaces: #" << WSAGetLastError() << endl; break;
+	case 2:  cout << "\nError open interface handle: #" << WSAGetLastError() << endl; break;
+	case 3:  cout << "\nError create pcap file: #" << GetLastError() << endl; break;
+	case 4:	 cout << "\nError memory allocation: #" << GetLastError() << endl; break;
+	case 5:  cout << "\nError GetExtendedTcpTable: #" << GetLastError() << endl; break;
+	case 6:  cout << "\nError GetExtendedUdpTable: #" << GetLastError() << endl; break;
 	}
 
-	closesocket(s);
-	WSACleanup();
 	while (true) cin.get();
 	exit(code);
 }
@@ -53,7 +43,8 @@ void ShowIPHeaderInfo(IPHeader* iph)
 	cout << "TTL: " << dec << (UINT)iph->ip_ttl << endl;
 	cout << "Protocol: ";
 
-	switch (iph->ip_protocol) {
+	switch (iph->ip_protocol)
+	{
 	case IPPROTO_TCP:
 		cout << "TCP" << endl;
 		break;
@@ -113,7 +104,8 @@ void ShowPacketData(IPHeader* iph, vector<BYTE>& Buffer)
 	cout << "--------------- IP packet data ----------------" << endl << endl;
 	int ip_len = ntohs(iph->ip_length);
 	int added = 16 - ip_len % 16;
-	for (int j = 0; j < (ip_len + added); j++) {
+	for (int j = 0; j < (ip_len + added); j++)
+	{
 		if (j >= ip_len)
 			printf("   ");
 		else
@@ -122,7 +114,8 @@ void ShowPacketData(IPHeader* iph, vector<BYTE>& Buffer)
 			else
 				printf("%X ", Buffer[j]);
 
-		if ((j + 1) % 16 == 0 && j != 0) {
+		if ((j + 1) % 16 == 0 && j != 0)
+		{
 			printf("\t\t");
 			for (int z = j - 15; z <= j; z++)
 				if ((Buffer[z] < 32 || Buffer[z] > 126) && (z < ip_len))
@@ -140,7 +133,8 @@ void print_info(int count, IPHeader* iph, TCPHeader* tcph, UDPHeader* udph, wstr
 {
 	in_addr ipaddr; char buf_ip[20];
 
-	if (count == 1) {
+	if (count == 1)
+	{
 		cout << "#      " << "src_ip           " << "dst_ip           " << "protocol   ";
 		cout << "src_port    " << "dst_port    " << "Process                          " << endl;
 	}
@@ -169,11 +163,14 @@ void print_packet(int count, IPHeader* iph, TCPHeader* tcph, UDPHeader* udph, ws
 {
 	cout << "---------------- Packet # " << dec << int(count) << " -----------------" << endl << endl;
 	wcout << L"Packet acssociated with the process: " << str << endl << endl;
+
 	ShowIPHeaderInfo(iph);
+
 	if (iph->ip_protocol == IPPROTO_TCP)
 		ShowTCPHeaderInfo(tcph); else
 		if (iph->ip_protocol == IPPROTO_UDP)
 			ShowUDPHeaderInfo(udph);
+
 	ShowPacketData(iph, Buffer);
 	cout << "\n\n\n\n";
 }
@@ -191,11 +188,13 @@ wstring GetProcessNameByPID(DWORD pid)
 		return L"Unknown process";
 
 
-	if (GetModuleFileNameEx(hProcess, 0, nameProc, MAX_PATH) != NULL) {  // ищем имя процесса по хэндлу
+	if (GetModuleFileNameEx(hProcess, 0, nameProc, MAX_PATH) != NULL)   // ищем имя процесса по хэндлу
+	{  
 		CloseHandle(hProcess);
 		wstring process_name = nameProc;
 		size_t pos = process_name.rfind('\\');  // отрезаем лишний путь и берём только имя файла
-		if (pos != string::npos) {
+		if (pos != string::npos)
+		{
 			process_name = process_name.substr(pos + 1);
 			return process_name;
 		}
@@ -212,19 +211,21 @@ wstring GetTcpProcessName(IPHeader* iph, TCPHeader* tcph, wstring& enter_procnam
 	PMIB_TCPTABLE_OWNER_PID pTcpTable = (MIB_TCPTABLE_OWNER_PID*)malloc(sizeof(MIB_TCPTABLE_OWNER_PID));
 	DWORD dwSize = sizeof(MIB_TCPTABLE_OWNER_PID), dwRetVal = 0;
 	if ((dwRetVal = GetExtendedTcpTable(pTcpTable, &dwSize, true, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0))
-		== ERROR_INSUFFICIENT_BUFFER) {
+		== ERROR_INSUFFICIENT_BUFFER)
+	{
 		free(pTcpTable);
 		pTcpTable = (MIB_TCPTABLE_OWNER_PID*)malloc(dwSize);
-		if (pTcpTable == NULL) {
+		if (pTcpTable == NULL)
+		{
 			free(pTcpTable);
-			error_exit(7);
+			error_exit(4);
 		}
 	}
 
 	wstring process_name;
 	if ((dwRetVal = GetExtendedTcpTable(pTcpTable, &dwSize, true, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0))
-		== NO_ERROR) {
-
+		== NO_ERROR)
+	{
 		for (int i = 0; i < (int)pTcpTable->dwNumEntries; i++)  // ищем связку IP/порт пакета в таблице соединений
 
 			if ((iph->ip_src_addr == pTcpTable->table[i].dwLocalAddr &&
@@ -234,19 +235,20 @@ wstring GetTcpProcessName(IPHeader* iph, TCPHeader* tcph, wstring& enter_procnam
 				(iph->ip_src_addr == pTcpTable->table[i].dwRemoteAddr &&
 					iph->ip_dst_addr == pTcpTable->table[i].dwLocalAddr &&
 					tcph->tcp_srcport == pTcpTable->table[i].dwRemotePort &&
-					tcph->tcp_dstport == pTcpTable->table[i].dwLocalPort)) {
-
-
+					tcph->tcp_dstport == pTcpTable->table[i].dwLocalPort))
+			{
 				//когда статус TIME_WAIT и PID = 0, handle не открывается, но процесс есть и связан с
 				//предыдущим пакетом
-				if (pTcpTable->table[i].dwState != 11 && pTcpTable->table[i].dwOwningPid != 0) {
+				if (pTcpTable->table[i].dwState != 11 && pTcpTable->table[i].dwOwningPid != 0)
+				{
 					process_name = GetProcessNameByPID(pTcpTable->table[i].dwOwningPid);
 					previous_name = process_name;
 				}
 				else
 					process_name = previous_name;	//имя процесса будет таким же, как в предыдущем пакете			
 
-				if (enter_procname == L"NULL" || enter_procname == process_name) {
+				if (enter_procname == L"NULL" || enter_procname == process_name)
+				{
 					free(pTcpTable);
 					return process_name;
 				}
@@ -258,7 +260,7 @@ wstring GetTcpProcessName(IPHeader* iph, TCPHeader* tcph, wstring& enter_procnam
 	else
 	{
 		free(pTcpTable);
-		error_exit(8);
+		error_exit(5);
 	}
 }
 
@@ -269,27 +271,30 @@ wstring GetUdpProcessName(IPHeader* iph, UDPHeader* udph, wstring& enter_procnam
 	PMIB_UDPTABLE_OWNER_PID pUdpTable = (MIB_UDPTABLE_OWNER_PID*)malloc(sizeof(MIB_UDPTABLE_OWNER_PID));
 	DWORD dwSize = sizeof(MIB_UDPTABLE_OWNER_PID), dwRetVal = 0;
 	if ((dwRetVal = GetExtendedUdpTable(pUdpTable, &dwSize, true, AF_INET, UDP_TABLE_OWNER_PID, 0))
-		== ERROR_INSUFFICIENT_BUFFER) {
+		== ERROR_INSUFFICIENT_BUFFER)
+	{
 		free(pUdpTable);
 		pUdpTable = (MIB_UDPTABLE_OWNER_PID*)malloc(dwSize);
-		if (pUdpTable == NULL) {
+		if (pUdpTable == NULL)
+		{
 			free(pUdpTable);
-			error_exit(7);
+			error_exit(4);
 		}
 	}
 
 	if ((dwRetVal = GetExtendedUdpTable(pUdpTable, &dwSize, true, AF_INET, UDP_TABLE_OWNER_PID, 0))
-		== NO_ERROR) {
-
+		== NO_ERROR)
+	{
 		for (int i = 0; i < (int)pUdpTable->dwNumEntries; i++)  // ищем связку IP/порт пакета в таблице соединений
 
 			if ((iph->ip_src_addr == pUdpTable->table[i].dwLocalAddr &&
 				udph->udp_srcport == pUdpTable->table[i].dwLocalPort) ||
 				(iph->ip_dst_addr == pUdpTable->table[i].dwLocalAddr &&
-					udph->udp_dstport == pUdpTable->table[i].dwLocalPort)) {
-
+					udph->udp_dstport == pUdpTable->table[i].dwLocalPort))
+			{
 				wstring process_name = GetProcessNameByPID(pUdpTable->table[i].dwOwningPid);
-				if (enter_procname == L"NULL" || enter_procname == process_name) {
+				if (enter_procname == L"NULL" || enter_procname == process_name)
+				{
 					free(pUdpTable);
 					return process_name;
 				}
@@ -301,98 +306,8 @@ wstring GetUdpProcessName(IPHeader* iph, UDPHeader* udph, wstring& enter_procnam
 	else
 	{
 		free(pUdpTable);
-		error_exit(9);
+		error_exit(6);
 	}
-}
-
-
-
-void init_gen_pcap_header(pcap_hdr* gen_header)  
-{
-	gen_header->magic_number = 0xa1b2c3d4;
-	gen_header->version_major = 2;
-	gen_header->version_minor = 4;
-	gen_header->thiszone = 0;
-	gen_header->sigfigs = 0;
-	gen_header->snaplen = 65535+1000;            // взяли с запасом, так как будем записывать ещё имя процесса 
-	gen_header->network = 1;                     //ethernet
-}
-
-
-
-void writehead_to_pcap(HANDLE& hFile)            
-{
-	pcap_hdr* gen_header;
-
-	wstring filename;
-	DWORD bytesWritten;
-
-	SYSTEMTIME lt;
-	GetLocalTime(&lt);    // создаём каждый раз уникальное имя pcap-файла из временной отметки
-	filename = to_wstring(lt.wYear) + L"-" + to_wstring(lt.wMonth) + L"-" + to_wstring(lt.wDay) + L"-" +
-		to_wstring(time(0)) + L".pcap";
-
-	hFile = CreateFileW(filename.c_str(), GENERIC_WRITE, NULL, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-	if (hFile == INVALID_HANDLE_VALUE)
-		error_exit(10);
-
-	gen_header = (pcap_hdr*)malloc(sizeof(pcap_hdr));
-	memset(gen_header, 0, sizeof(pcap_hdr));
-	init_gen_pcap_header(gen_header);
-
-	BOOL write_res = WriteFile(hFile, gen_header, sizeof(pcap_hdr), &bytesWritten, NULL);
-	if (write_res == 0)      // записали в pcap-файл глобальный заголовок
-		error_exit(11);
-
-	wcout << L"\n\n\n\n" << L"Packets will save to file: " << filename << L"\n\n";
-	free(gen_header);
-}
-
-
-
-void writepack_to_pcap(HANDLE& hFile, vector<BYTE> Data, UINT16 data_len, wstring& process_name)            
-{
-	pcappack_hdr* packHeader;
-	DWORD numWritten;	
-	BOOL write_res;
-
-	//заглушка канального уровня для wireshark
-	BYTE fakeeth[14] = { 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x00 };	
-
-	packHeader = (pcappack_hdr*)malloc(sizeof(pcappack_hdr));
-	memset(packHeader, 0, sizeof(pcappack_hdr));
-
-	//получаем временные отметки для каждого пакета
-	chrono::system_clock::duration dur = chrono::system_clock::now().time_since_epoch();
-	chrono::seconds sec = chrono::duration_cast<chrono::seconds>(dur);
-
-	//заполняем pcap-структуру заголовка каждого пакета
-	packHeader->ts_sec = sec.count();
-	packHeader->ts_usec = chrono::duration_cast<chrono::microseconds>(dur-sec).count();
-	packHeader->incl_len = (UINT32)data_len + sizeof(fakeeth) + 2 * (process_name.size());
-	packHeader->orig_len = (UINT32)data_len + sizeof(fakeeth) + 2 * (process_name.size());
-
-	//запись заголовка пакета для формата pcap
-	write_res = WriteFile(hFile, packHeader, sizeof(pcappack_hdr), &numWritten, NULL);
-	if (write_res == 0)
-		error_exit(12);
-
-	//запись заглушки для wireshark
-	WriteFile(hFile, fakeeth, sizeof(fakeeth), &numWritten, NULL);
-	if (write_res == 0)
-		error_exit(13);
-
-	//запись захваченного пакета
-	WriteFile(hFile, &Data[0], (UINT32)data_len, &numWritten, NULL);
-	if (write_res == 0)
-		error_exit(14);
-
-	//запись имени процесса
-	WriteFile(hFile, process_name.c_str(), 2 * (process_name.size()), &numWritten, NULL);
-	if (write_res == 0)
-		error_exit(15);
-
-	free(packHeader);
 }
 
 
