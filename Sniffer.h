@@ -2,19 +2,13 @@
 #include <iostream>
 #include <iomanip>
 #include <Winsock2.h>
-#include <WS2tcpip.h>
-#include <string>
 #include <vector>
 #include <windows.h>
-#include <time.h>
 #include <bitset>
-#include <Mstcpip.h>
-#include <fstream>
 #include <iphlpapi.h>
 #include <psapi.h>
 #include <algorithm>
 #include <sstream>
-#include <chrono>
 #include <pcap.h>
 using namespace std;
 
