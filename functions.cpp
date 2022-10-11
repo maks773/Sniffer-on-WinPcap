@@ -2,7 +2,7 @@
 using namespace std;
 
 
-wstring previous_name = L"Unknown process";      // для хранения имени процесса предыдущего пакета
+vector<pair<MIB_TCPROW_OWNER_MODULE, wstring>> found_sock_record;    // для хранения найденной записи и связанного процесса
 
 
                         // описание функций из заголовочного файла Sniffer.h
@@ -18,6 +18,7 @@ void error_exit(int code)
 	case 4:	 cout << "\nError memory allocation: #" << GetLastError() << endl; break;
 	case 5:  cout << "\nError GetExtendedTcpTable: #" << GetLastError() << endl; break;
 	case 6:  cout << "\nError GetExtendedUdpTable: #" << GetLastError() << endl; break;
+	case 7:  cout << "\nError in pcap_loop function: #" << GetLastError() << endl; break;
 	}
 
 	while (true) cin.get();
@@ -56,9 +57,12 @@ void ShowIPHeaderInfo(IPHeader* iph)
 	}
 
 	cout << "Header Checksum: 0x" << hex << ntohs(iph->ip_crc) << endl;
+
 	in_addr ipaddr; char buf_ip[20];
+
 	ipaddr.s_addr = iph->ip_src_addr;
 	cout << "Source: " << inet_ntop(AF_INET, &ipaddr, buf_ip, 16) << endl;
+
 	ipaddr.s_addr = iph->ip_dst_addr;
 	cout << "Destination: " << inet_ntop(AF_INET, &ipaddr, buf_ip, 16) << endl << endl;
 }
@@ -187,17 +191,16 @@ wstring GetProcessNameByPID(DWORD pid)
 	if (hProcess == NULL)
 		return L"Unknown process";
 
-
 	if (GetModuleFileNameEx(hProcess, 0, nameProc, MAX_PATH) != NULL)   // ищем имя процесса по хэндлу
 	{  
 		CloseHandle(hProcess);
 		wstring process_name = nameProc;
 		size_t pos = process_name.rfind('\\');  // отрезаем лишний путь и берём только имя файла
-		if (pos != string::npos)
-		{
+
+		if (pos != string::npos)		
 			process_name = process_name.substr(pos + 1);
-			return process_name;
-		}
+
+		return process_name;		
 	}
 
 	CloseHandle(hProcess);
@@ -206,15 +209,15 @@ wstring GetProcessNameByPID(DWORD pid)
 
 
 
-wstring GetTcpProcessName(IPHeader* iph, TCPHeader* tcph, wstring& enter_procname)         
+wstring GetTcpProcessName(IPHeader* iph, TCPHeader* tcph, wstring& enter_procname) 
 {
-	PMIB_TCPTABLE_OWNER_PID pTcpTable = (MIB_TCPTABLE_OWNER_PID*)malloc(sizeof(MIB_TCPTABLE_OWNER_PID));
-	DWORD dwSize = sizeof(MIB_TCPTABLE_OWNER_PID), dwRetVal = 0;
-	if ((dwRetVal = GetExtendedTcpTable(pTcpTable, &dwSize, true, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0))
+	PMIB_TCPTABLE_OWNER_MODULE pTcpTable = (MIB_TCPTABLE_OWNER_MODULE*)malloc(sizeof(MIB_TCPTABLE_OWNER_MODULE));
+	DWORD dwSize = sizeof(MIB_TCPTABLE_OWNER_MODULE), dwRetVal = 0;
+	if ((dwRetVal = GetExtendedTcpTable(pTcpTable, &dwSize, true, AF_INET, TCP_TABLE_OWNER_MODULE_ALL, 0))
 		== ERROR_INSUFFICIENT_BUFFER)
 	{
 		free(pTcpTable);
-		pTcpTable = (MIB_TCPTABLE_OWNER_PID*)malloc(dwSize);
+		pTcpTable = (MIB_TCPTABLE_OWNER_MODULE*)malloc(dwSize);
 		if (pTcpTable == NULL)
 		{
 			free(pTcpTable);
@@ -222,8 +225,9 @@ wstring GetTcpProcessName(IPHeader* iph, TCPHeader* tcph, wstring& enter_procnam
 		}
 	}
 
-	wstring process_name;
-	if ((dwRetVal = GetExtendedTcpTable(pTcpTable, &dwSize, true, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0))
+	wstring process_name = L"Unknown process";
+
+	if ((dwRetVal = GetExtendedTcpTable(pTcpTable, &dwSize, true, AF_INET, TCP_TABLE_OWNER_MODULE_ALL, 0))
 		== NO_ERROR)
 	{
 		for (int i = 0; i < (int)pTcpTable->dwNumEntries; i++)  // ищем связку IP/порт пакета в таблице соединений
@@ -237,25 +241,60 @@ wstring GetTcpProcessName(IPHeader* iph, TCPHeader* tcph, wstring& enter_procnam
 					tcph->tcp_srcport == pTcpTable->table[i].dwRemotePort &&
 					tcph->tcp_dstport == pTcpTable->table[i].dwLocalPort))
 			{
-				//когда статус TIME_WAIT и PID = 0, handle не открывается, но процесс есть и связан с
-				//предыдущим пакетом
+				// когда статус TIME_WAIT и PID = 0, handle не открывается, но процесс есть и связан с одним
+				// из предыдущих пакетов
+
 				if (pTcpTable->table[i].dwState != 11 && pTcpTable->table[i].dwOwningPid != 0)
 				{
 					process_name = GetProcessNameByPID(pTcpTable->table[i].dwOwningPid);
-					previous_name = process_name;
+
+					if (process_name == L"Unknown process")                  // перепроверка на связь пакета с предыдущими,
+						process_name = find_in_prev_socket(iph, tcph);       // у которых определено имя процесса 
+
+					int flag = 0;
+
+					for (int z = found_sock_record.size() - 1; z >= 0; z--)  // сохраняем в буфер уникальные сокеты
+					{                                                        // без учёта клиентского порта
+						if (process_name == L"Unknown process")
+						{
+							flag = -1;
+							break;
+						}							
+							
+						if ((iph->ip_src_addr == found_sock_record[z].first.dwRemoteAddr &&
+							tcph->tcp_srcport == found_sock_record[z].first.dwRemotePort) ||
+							(iph->ip_dst_addr == found_sock_record[z].first.dwRemoteAddr &&
+								tcph->tcp_dstport == found_sock_record[z].first.dwRemotePort))
+						{
+							flag = -1;
+							break;
+						}
+						
+					}
+
+					if (flag != -1) 
+						found_sock_record.push_back(make_pair(pTcpTable->table[i], process_name));					
 				}
 				else
-					process_name = previous_name;	//имя процесса будет таким же, как в предыдущем пакете			
+					process_name = find_in_prev_socket(iph, tcph);	 // ищем процесс в предыдущих пакетах			
+
+				free(pTcpTable);
 
 				if (enter_procname == L"NULL" || enter_procname == process_name)
-				{
-					free(pTcpTable);
 					return process_name;
-				}
+				else
+					return L"Reject";
 			}
 
+		if (ip_dev == iph->ip_src_addr || ip_dev == iph->ip_dst_addr)     // на случай, если сокет уже закрыт
+		{                                                                 // к моменту обработки пакета
+			process_name = find_in_prev_socket(iph, tcph);
+		}
+		else
+			process_name = L"Reject";
+                                                 
 		free(pTcpTable);
-		return L"NULL";
+		return process_name;
 	}
 	else
 	{
@@ -282,6 +321,8 @@ wstring GetUdpProcessName(IPHeader* iph, UDPHeader* udph, wstring& enter_procnam
 		}
 	}
 
+	wstring process_name = L"Unknown process";
+
 	if ((dwRetVal = GetExtendedUdpTable(pUdpTable, &dwSize, true, AF_INET, UDP_TABLE_OWNER_PID, 0))
 		== NO_ERROR)
 	{
@@ -292,16 +333,21 @@ wstring GetUdpProcessName(IPHeader* iph, UDPHeader* udph, wstring& enter_procnam
 				(iph->ip_dst_addr == pUdpTable->table[i].dwLocalAddr &&
 					udph->udp_dstport == pUdpTable->table[i].dwLocalPort))
 			{
-				wstring process_name = GetProcessNameByPID(pUdpTable->table[i].dwOwningPid);
+				process_name = GetProcessNameByPID(pUdpTable->table[i].dwOwningPid);
+
+				free(pUdpTable);
+
 				if (enter_procname == L"NULL" || enter_procname == process_name)
-				{
-					free(pUdpTable);
 					return process_name;
-				}
+				else
+					return L"Reject";
 			}
 
+		if (ip_dev != iph->ip_src_addr && ip_dev != iph->ip_dst_addr)
+			process_name = L"Reject";
+
 		free(pUdpTable);
-		return L"NULL";
+		return process_name;
 	}
 	else
 	{
@@ -315,10 +361,56 @@ wstring GetUdpProcessName(IPHeader* iph, UDPHeader* udph, wstring& enter_procnam
 int isDNS(TCPHeader* tcph, UDPHeader* udph)
 {
 	if ((tcph != NULL && ntohs(tcph->tcp_dstport) == 53) || (udph != NULL && ntohs(udph->udp_dstport) == 53))
-		return 0;      //dns-запрос
+		return 0;      // dns-запрос
 	else
 		if ((tcph != NULL && ntohs(tcph->tcp_srcport) == 53) || (udph != NULL && ntohs(udph->udp_srcport) == 53))
-			return 1;  //dns-ответ
+			return 1;  // dns-ответ
 		else
-			return 2;  //не dns-пакет
+			return 2;  // не dns-пакет
+}
+
+
+
+boolean isTCPSyn(TCPHeader* tcph)
+{
+	if (tcph == NULL)
+		return false;
+	
+	bitset<6> flags(ntohs(tcph->tcp_hlen_flags) & 63);
+
+	if (flags[1] == 1)
+		return true;
+	else
+		return false;
+}
+
+
+
+void print_summary(int capture_packets, int saved_packets)
+{
+	cout << "\n\nPacket capture completed!\n\n";
+
+	cout << "Captured packets: " << capture_packets << endl;       // cколько всего пакетов захватил драйвер
+
+	cout << "Saved packets to file: " << saved_packets << endl;    // сколько пакетов сохранили в файл
+}
+
+wstring find_in_prev_socket(IPHeader* iph, TCPHeader* tcph)
+{
+	for (int z = found_sock_record.size() - 1; z >= 0; z--)
+
+		if ((found_sock_record[z].second != L"Unknown process") &&
+			(iph->ip_src_addr == found_sock_record[z].first.dwLocalAddr &&
+				iph->ip_dst_addr == found_sock_record[z].first.dwRemoteAddr &&				
+				tcph->tcp_dstport == found_sock_record[z].first.dwRemotePort) ||
+			(iph->ip_src_addr == found_sock_record[z].first.dwRemoteAddr &&
+				iph->ip_dst_addr == found_sock_record[z].first.dwLocalAddr &&
+				tcph->tcp_srcport == found_sock_record[z].first.dwRemotePort))			
+		{
+
+			// имя процесса будет таким же, как в одном из предыдущих сокетов с такой связкой IP+порт
+		    return found_sock_record[z].second;			
+		}
+
+	return L"Unknown process";
 }

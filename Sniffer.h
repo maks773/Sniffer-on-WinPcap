@@ -10,10 +10,18 @@
 #include <algorithm>
 #include <sstream>
 #include <pcap.h>
+#include <thread>
+#include <mutex>
 using namespace std;
 
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "iphlpapi.lib")
+
+
+                                   // описание глобальных переменных
+
+
+extern u_long ip_dev;  // IP-адрес интерфейса захвата           
 
 
                                    // описание структур
@@ -59,7 +67,6 @@ typedef struct // Структура для сохранения заголовков пакетов
 	IPHeader  ipheader;            // заголовок IP
 	TCPHeader tcpheader;           // заголовок TCP
 	UDPHeader udpheader;	       // заголовок UDP
-	pcap_pkthdr header;            // заголовок пакета для pcap-файла 
 } temp_buf;
 #pragma pack(pop)
 
@@ -92,7 +99,17 @@ wstring GetTcpProcessName(IPHeader*, TCPHeader*, wstring&);
 // поиск связки IP+порт захваченного UDP пакета в таблице UDP-соединений
 wstring GetUdpProcessName(IPHeader*, UDPHeader*, wstring&);
 
-int isDNS(TCPHeader*, UDPHeader*);              // проверка, захвачен DNS-пакет или нет
+int isDNS(TCPHeader*, UDPHeader*);                            // проверка, захвачен DNS-пакет или нет
 
-// основная функция обработки захваченных пакетов (описание в файле Sniffer.cpp)
+boolean isTCPSyn(TCPHeader*);                                 // проверка, установлен ли флаг SYN в TCP-пакете
+
+void print_summary(int capture_packets, int saved_packets);   // вывод итоговой информации после захвата
+
+wstring find_in_prev_socket(IPHeader*, TCPHeader*);           // поиск информации о процессе в предыдущих пакетах
+
+// функция для сохранения в память захваченных пакетов (описание функции - в файле Sniffer.cpp)
 void process_packet(u_char*, const struct pcap_pkthdr*, const u_char*);
+
+// функция второго потока, который параллельно захвату новых пакетов (в функции process_pcaket)
+// производит их анализ (описание функции - в файле Sniffer.cpp)
+void threadFunction(u_char*, vector<pcap_pkthdr>&, vector<vector<u_char>>&);

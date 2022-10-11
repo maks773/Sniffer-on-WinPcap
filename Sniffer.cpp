@@ -2,123 +2,229 @@
 using namespace std;
 
 
-int p_count = 0;                                    // счётчик количества записанных пакетов
-vector<temp_buf> Temp(65535);                       // для хранения содержимого пакетов между DNS-запросом и ответом
-vector<vector<u_char>> Buf(65535);                  // для хранения заголовком пакетов между DNS-запросом и ответом
-int t = 0;                                          // счётчик пакетов между DNS-запросом и ответом
-int flag = 100;                                     // 100 - начальное состояние флага
-wstring enter_procname = L"NULL";                   // введенное имя процесса
-char num;                                           // хранение введеного номера в режиме диалога
-pcap_t* handle;                                     // хэндл интерфейса для захвата
+int capture_packets = 0;                       // счётчик общего количества захваченных пакетов
+int saved_packets = 0;                         // счётчик количества сохраненных в файл пакетов
+
+vector<pcap_pkthdr> AllHeaders;                // для хранения pcap-заголовков захваченных пакетов
+vector<vector<u_char>> AllPackets;             // для хранения содержимого захвачененых пакетов
+
+int thread_flag = 0;                           // флаг состояния потока (1 - запущен, 0 - не запущен)
+
+wstring enter_procname = L"NULL";              // для хранения введенного с консоли имени процесса
+char num;                                      // для хранения введеного с консоли номера (в режиме диалога)
+pcap_t* handle;                                // хэндл интерфейса для захвата
+mutex m;                                       // мьютекс для синхронизации потоков
+u_long ip_dev;                                 // для хранения IP-адреса выбранного интерфейса захвата
+
+
+void threadFunction(u_char* file, vector<pcap_pkthdr>& AllHeaders, vector<vector<u_char>>& AllPackets)
+{	
+	int close_flag = 0;              // флаг состояния _kbhit (была остановка захвата или нет)
+	int dns_flag = 2;                // флаг-идентификатор dns-пакета 
+	int t = 0;                       // счётчик DNS-пакетов
+	int syn_flag = 0;                // счётчик TCPsyn-пакетов
+	vector<int> dns_numbers;         // для хранения номеров DNS-пакетов
+	vector<temp_buf> Temp(65535);    // для хранения содержимого DNS-пакетов
+
+	for (int i = 0; ; i++)           // начинаем анализ каждого захваченного пакета
+	{	
+		if (_kbhit() && close_flag == 0)     // для прерывания захвата новых пакетов при нажатии <enter>,
+		{                                    // когда проанализированы ещё не все пакеты
+			pcap_breakloop(handle);
+			close_flag = 1;			
+		}
+		
+		while (i >= capture_packets)             
+		{
+			if (_kbhit() || close_flag == 1)  // если проанализированы все захваченные пакеты и был нажат <enter>,
+			{                                 // то завершаем работу программы
+				pcap_breakloop(handle);
+				print_summary(capture_packets, saved_packets);   // печать итоговой информации после захвата
+				return;                    
+			}				                  // если проанализированы все пакеты, а новые ещё не были захвачены,
+			else                              // то приостанавливаем поток, чтобы не завершился цикл, т.е.
+				this_thread::sleep_for(chrono::milliseconds(1)); // ждём нажатие <enter> либо поступление новых пакетов
+		}
+		
+		m.lock();
+
+		pcap_pkthdr AllHeaders_item = AllHeaders[i];       // сохраняем pcap-заголовок пакета
+		vector<u_char> AllPackets_item = AllPackets[i];	   // сохраняем содержимое пакета
+
+		m.unlock();
+
+		// для хранения заголовков IP, TCP, UDP
+		IPHeader* iph = NULL;  TCPHeader* tcph = NULL;  UDPHeader* udph = NULL;
+
+		wstring process_name = L"Unknown process";             // для хранения имени процесса
+		wstring dns_proc_name = L"Unknown process";            // для хранения имени процесса dns-пакета 
+
+		iph = (IPHeader*)(&AllPackets_item[0] + 14);           // выделяем заголовок IP
+		UINT ip_hlen = (UINT)((iph->ip_ver_hlen & 15) * 4);    // длина IP-заголовка
+
+		if (iph->ip_protocol == IPPROTO_TCP)
+		{
+			tcph = (TCPHeader*)(&AllPackets_item[0] + 14 + ip_hlen);      // выделяем заголовок TCP
+			process_name = GetTcpProcessName(iph, tcph, enter_procname);  // ищем связь пакета с процессом в ОС
+		}
+		else if (iph->ip_protocol == IPPROTO_UDP)
+		{
+			udph = (UDPHeader*)(&AllPackets_item[0] + 14 + ip_hlen);      // выделяем заголовок UDP
+			process_name = GetUdpProcessName(iph, udph, enter_procname);  // ищем связь пакета с процессом в ОС
+		}
+		else
+			continue;    // если это не пакет TCP или UDP, то переходим к анализу следующего пакета
+
+		int is_dns = isDNS(tcph, udph);      // проверка, относится пакет к DNS (0,1) или нет (2)  
+
+		if (is_dns != 2)                     
+		{
+			dns_numbers.push_back(i);        // запоминаем номер каждого DNS-пакета
+			
+			Temp[t].ipheader = *iph;		 // запоминаем его заголовок IP	
+
+			if (udph != NULL)
+				Temp[t].udpheader = *udph;   // запоминаем его заголовок UDP
+			else if (tcph != NULL)
+				Temp[t].tcpheader = *tcph;   // TCP неактуально для DNS, но на всякий случай пусть будет
+
+			t++;			                 // итерация счётчика захваченных DNS-пакетов
+
+			if (is_dns == 0)
+				dns_flag = 0;                // DNS-запрос
+			else
+				dns_flag = 1;                // DNS-ответ
+		}
+		
+		if (dns_flag == 1 && isTCPSyn(tcph))   // ищем первый пакет TCP-syn после DNS-ответа
+		{
+			string buf_ip(16, '\0');         // буфер для хранения IP-адреса (для функции inet_ntop)			
+			string temp;                     // хранит октет IP-адреса в виде строки
+			vector<int> temp_ip(4, 0);       // хранит IP-адрес в виде четырёх чисел
+			int j = 0;                       // переменная-счётчик для циклов
+
+			// преобразуем IP-адрес в строку
+			inet_ntop(AF_INET, &iph->ip_dst_addr, (char*)buf_ip.c_str(), 16);
+
+			stringstream stream(buf_ip);
+			while (getline(stream, temp, '.'))
+			{
+				temp_ip[j] = stoi(temp);     // перевод IP-адреса назначния в формат вектора из четырёх чисел
+				j++;
+			}
+
+			for (int z = dns_numbers.size() - 1; z >= 0; z--)
+			{
+				// перевод содержимого DNS-пакета в формат кодов символов (int)
+
+				vector<int> int_pack(AllPackets[dns_numbers[z]].size());  	
+
+				for (j = 0; j < int_pack.size(); j++)
+					int_pack[j] = AllPackets[dns_numbers[z]][j];
+
+				// поиск IP адреса назначния TCP-syn пакета в DNS-пакете (так как после DNS-ответа
+				// идёт пакет TCP c установкой соединения по одному из полученных адресов)
+
+				auto it = search(int_pack.begin(), int_pack.end(), temp_ip.begin(), temp_ip.end());
+
+				if (it != int_pack.end())          // если IP успешно найден, то завхаченные DNS-пакеты связаны
+				{                                  // с процессом этого TCP-пакета
+					dns_proc_name = process_name;
+					syn_flag = 5;
+					break;
+				}			
+			}
+
+			if (syn_flag != 5)  // предполагается, что IP из DNS-ответа является IP-адресом назначения ближайших   
+				syn_flag++;     // 5-и TCPsyn-пакетов (если нет, то выведем потом dns-пакеты как unknown process)
+
+			if (syn_flag >= 5)
+			{
+				if (enter_procname == L"NULL" || enter_procname == dns_proc_name)
+
+					for (j = 0; j < dns_numbers.size(); j++)    // выводим сохраненные DNS-пакеты
+					{
+						saved_packets++;         // увеличиваем счетчик сохраненных пакетов
+
+						if (num == '1')          // выводим пакет в консоль
+							print_info(saved_packets, &Temp[j].ipheader, &Temp[j].tcpheader,
+								&Temp[j].udpheader, dns_proc_name);
+
+						m.lock();
+
+						// резервируем для вектора дополнительную память
+						AllPackets[dns_numbers[j]].reserve(65535 + 1000);
+
+						// вставляем в конец пакета имя процесса
+						AllPackets[dns_numbers[j]].insert(AllPackets[dns_numbers[j]].begin()
+							+ AllHeaders[dns_numbers[j]].caplen, dns_proc_name.begin(), dns_proc_name.end());
+
+						// корректируем длину пакета в pcap-заголовке
+						AllHeaders[dns_numbers[j]].caplen = AllHeaders[dns_numbers[j]].caplen + dns_proc_name.size();
+						AllHeaders[dns_numbers[j]].len = AllHeaders[dns_numbers[j]].caplen;
+
+						// записываем пакет в файл
+						pcap_dump(file, &AllHeaders[dns_numbers[j]], &AllPackets[dns_numbers[j]][0]);
+
+						m.unlock();
+					}
+
+			    dns_numbers.clear();  // очищаем вектор с номерами DNS-пакетов
+			    dns_flag = 2;         // устанавливаем флаг в начальное состояние
+			    t = 0;                // обнуляем счетчик DNS-пакетов
+				syn_flag = 0;         // обнуляем счетчик TCPsyn-пакетов
+			}
+		}
+		else if (is_dns != 2) continue;  // если после DNS-ответа идут сразу другие DNS-пакеты, а не TCP-syn, то
+		                                 // переходим к их анализу (сохранению) 
+
+
+		// если пакет не DNS, то сразу выводим его, так как имя процесса для него определяется в этой же итерации
+
+		if ((enter_procname == L"NULL" || enter_procname == process_name) && process_name != L"Reject")
+		{
+			saved_packets++;             
+
+			if (num == '1')              
+				print_info(saved_packets, iph, tcph, udph, process_name);
+
+			AllPackets_item.reserve(65535 + 1000);
+
+			AllPackets_item.insert(AllPackets_item.begin() + AllHeaders_item.caplen,
+				process_name.begin(), process_name.end());
+
+			AllHeaders_item.caplen = AllHeaders_item.caplen + process_name.size();
+
+			AllHeaders_item.len = AllHeaders_item.caplen;
+
+			pcap_dump(file, &AllHeaders_item, &AllPackets_item[0]);			
+		}		
+	}
+}
 
 
 void process_packet(u_char* file, const struct pcap_pkthdr* header, const u_char* Buffer)
-{
-	IPHeader* iph = NULL;  TCPHeader* tcph = NULL;  UDPHeader* udph = NULL;
-	wstring process_name = L"Unknown process";             // для хранения имени процесса
-
-	iph = (IPHeader*)(Buffer + 14);                        // выделяем заголовок IP
-	UINT ip_hlen = (UINT)((iph->ip_ver_hlen & 15) * 4);    // длина IP-заголовка
-
-	if (iph->ip_protocol == IPPROTO_TCP)
+{    
+	if (Buffer != NULL && header != NULL && header->len == header->caplen)
 	{
-		tcph = (TCPHeader*)(Buffer + 14 + ip_hlen);                   // выделяем заголовок TCP
-		process_name = GetTcpProcessName(iph, tcph, enter_procname);  // ищем связь пакета с процессом в ОС
-	}
-	else if (iph->ip_protocol == IPPROTO_UDP)
-	{
-		udph = (UDPHeader*)(Buffer + 14 + ip_hlen);                   // выделяем заголовок UDP
-		process_name = GetUdpProcessName(iph, udph, enter_procname);  // ищем связь пакета с процессом в ОС 
-	}
-	else
-		return;
+		vector<u_char> temp_buf(Buffer, Buffer + header->caplen);  // преобразуем указатель захваченного пакета в вектор
 		
-	int is_dns = isDNS(tcph, udph);                        // проверка, относится пакет к DNS (0,1) или нет (2)               
+		m.lock();
 
-	if (is_dns == 2 && flag == 1)                          // обработка пакета, идущего после dns-ответа
-	{                      
-		string buf_ip(16, '\0');  vector<int> temp_ip(4, 0);  int nn = 0;  string temp;
-		inet_ntop(AF_INET, &iph->ip_dst_addr, (char*)buf_ip.c_str(), 16);
-		stringstream stream(buf_ip);
+		AllPackets.push_back(temp_buf);                            // сохраняем каждый захваченный пакет
+		AllHeaders.push_back(*header);                             // сохраняем каждый захваченный pcap-заголовок пакета  
+		capture_packets++;		                                   // увеличиваем счётчик захваченных пакетов	
 
-		while (getline(stream, temp, '.'))
-		{
-			temp_ip[nn] = stoi(temp);    // перевод IP-адреса назначния в формат массива из четырёх чисел
-			nn++;
+		m.unlock();
+
+		if (capture_packets >= 10 && thread_flag != 1)             // запускаем поток для анализа пакетов
+		{                                                          // с мини-задержкой, после 10 захваченных пакетов
+			thread_flag = 1;
+			thread thr(threadFunction, file, ref(AllHeaders), ref(AllPackets));
+			SetThreadPriority(thr.native_handle(), 2);             // повышаем приоритет потока
+			thr.detach();                                          // поток работаем параллельно (пущен на "самотек")
 		}
-
-		vector<int> int_pack(65535);	 // перевод пакета в формат кодов символов (int)		
-		for (nn = 0; nn < 65535; nn++)
-			int_pack[nn] = Buf[t - 1][nn];
-
-		// поиск IP адреса назначния TCP пакета в DNS-ответе (так как после DNS-ответа
-		// идёт пакет TCP c установкой соединения по одному из полученных адресов)
-
-		auto it = search(int_pack.begin(), int_pack.end(), temp_ip.begin(), temp_ip.end());
-
-		if (it != int_pack.end() && process_name != L"NULL") 
-		{
-			for (int i = 0; i < t; i++)
-			{                                 // если адрес найден и TCP-пакет связан с процессом, то выводим
-				p_count++;                    // захваченные DNS-ответ, запрос и пакеты между ними,
-											  // так как DNS-пакеты тоже связаны с этим процессом
-				if (num == '1')
-					print_info(p_count, &Temp[i].ipheader, &Temp[i].tcpheader,
-						&Temp[i].udpheader, process_name);								
-				
-				Buf[i].insert(Buf[i].begin() + Temp[i].header.len, process_name.begin(), process_name.end());				
-				Temp[i].header.len = Temp[i].header.len + process_name.size();
-				Temp[i].header.caplen = Temp[i].header.len;
-
-				pcap_dump(file, &Temp[i].header, (u_char*)&Buf[i][0]);				
-			}
-			t = 0; flag = 100;                // обнуляем счётчик и ставим флаг в начальное состояние
-		}
-		else
-		{
-			t = 0; flag = 100; return;
-		}					
 	}
-
-	if (is_dns != 2 || flag != 100)           // сохраняем пакеты между DNS-запросом и DNS-ответом
-	{	 
-		Temp[t].ipheader = *iph;
-		Temp[t].header = *header;
-
-		if (udph != NULL)
-			Temp[t].udpheader = *udph;
-		else
-			Temp[t].tcpheader = *tcph;
-
-		vector<u_char> temp_vec(Buffer, Buffer + 65535 + 1000);
-		Buf[t] = temp_vec;  t++;
-
-		if (is_dns == 0)                    // DNS-запрос
-			flag = 0;
-		else if (is_dns == 1)               // DNS-ответ
-			flag = 1;
-
-		return;
-	}
-
-
-	if (process_name != L"NULL")            // если захваченный пакет связан с процессом, выводим его
-	{     
-		p_count++;
-
-		if (num == '1')
-			print_info(p_count, iph, tcph, udph, process_name);		
-			
-		vector<u_char> temp_vec(Buffer, Buffer + 65535 + 1000);			
-		temp_vec.insert(temp_vec.begin() + header->len, process_name.begin(), process_name.end());		
-		Temp[0].header = *header;
-		Temp[0].header.len = header->len + process_name.size();
-		Temp[0].header.caplen = Temp[0].header.len;
-
-		pcap_dump(file, &Temp[0].header, (u_char*)&temp_vec[0]);		
-	}
-
-	if (_kbhit()) pcap_breakloop(handle);   // остановка захвата по нажатию любой клавиши в консоли 
 }
 
 
@@ -133,6 +239,7 @@ int main()
 		error_exit(1);
 
 	vector<string> iface_name(100);      // буфер для хранения имён интерфейсов
+	vector<u_long> iface_ip(100);        // буфер для хранения адресов интерфейсов 
 	char count = '1';                    // номер текущего интерфейса
 	string buf_ip;                       // буфер для хранения преобразованного IP (для inet_ntop)
 
@@ -145,7 +252,8 @@ int main()
 		for (pcap_addr_t *ip = iface->addresses; ip != NULL; ip = ip->next)
 			if (ip->addr->sa_family == AF_INET)
 			{
-				iface_name[count - '0'] = iface->name;      // сохраняем имена интерфейсов
+				iface_name[count - '0'] = iface->name;                                   // сохраняем имена интерфейсов
+				iface_ip[count - '0'] = ((sockaddr_in*)ip->addr)->sin_addr.S_un.S_addr;  // сохраняем адреса интерфейсов 
 
 				cout << count << ". " << inet_ntop(AF_INET, &((sockaddr_in*)ip->addr)->sin_addr,
 					&buf_ip[0], 16) << endl;
@@ -165,9 +273,11 @@ int main()
 
 	// открываем хэндл для захвата пакетов с выбранного интерфейса
 
-	handle = pcap_open_live(iface_name[num - '0'].c_str(), 65535 + 1000, 1, 0, &errbuf[0]);
+	handle = pcap_open_live(iface_name[num - '0'].c_str(), 65535, 1, 0, &errbuf[0]);
 	if (handle == NULL)
 		error_exit(2);
+
+	ip_dev = iface_ip[num - '0'];                   // сохранили IP-адрес выбранного интерфейса
 
 	pcap_freealldevs(interfaces);                   // очищаем список с ранее полученными интерфейсами
 
@@ -212,15 +322,14 @@ int main()
 	if (file == NULL)
 		error_exit(3);
 
-	cout << "\n\n\n\n" << "Start packet capture...  [ TO STOP capture PRESS ANY KEY ]" << "\n\n";	
+	cout << "\n\n\n\n" << "Start packet capture...  [ TO STOP capture PRESS <ENTER> ]" << "\n\n";	
 	
-	pcap_loop(handle, 0, process_packet, (unsigned char*)file);   // начинаем захват пакетов
+	if (PCAP_ERROR == pcap_loop(handle, -1, process_packet, (unsigned char*)file))    // начинаем захват пакетов
+		error_exit(7);                                            
 
 	pcap_close(handle);
 
-	cout << "\n\nPacket capture completed!\n\n";
-
-	SetConsoleMode(hInput, prevConsoleMode);                      // возврат прежних настроек консоли
+	SetConsoleMode(hInput, prevConsoleMode);                       // возврат прежних настроек консоли
 	
 	while (true) cin.get();
 	

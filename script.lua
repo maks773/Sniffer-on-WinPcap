@@ -13,7 +13,9 @@ function process.dissector(buf, pinfo, tree)         -- функция диссектора
     
     subtree = tree:add(process, buf(ind))            -- создаем поддерево    
 
-    local pr = buf(ind):string()                     -- получаем имя процесса    
+    local pr = buf(ind):string()                     -- получаем имя процесса
+
+    pr = string.gsub(pr, "%z", "")                   -- удаляем в строке нулевые символы (при наличии в кадре padding)
     
     subtree:add(p_name, pr)                          -- создаем поле в поддереве  
 
