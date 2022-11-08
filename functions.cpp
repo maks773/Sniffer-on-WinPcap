@@ -2,7 +2,7 @@
 using namespace std;
 
 
-vector<pair<MIB_TCPROW_OWNER_MODULE, wstring>> found_sock_record;    // для хранения найденной записи и связанного процесса
+vector<pair<MIB_TCPROW_OWNER_PID, wstring>> found_sock_record;    // для хранения найденной записи и связанного процесса
 
 
                         // описание функций из заголовочного файла Sniffer.h
@@ -12,17 +12,21 @@ void error_exit(int code)
 {
 	switch (code)
 	{
-	case 1:  cout << "\nError get interfaces: #" << WSAGetLastError() << endl; break;
-	case 2:  cout << "\nError open interface handle: #" << WSAGetLastError() << endl; break;
-	case 3:  cout << "\nError create pcap file: #" << GetLastError() << endl; break;
-	case 4:	 cout << "\nError memory allocation: #" << GetLastError() << endl; break;
-	case 5:  cout << "\nError GetExtendedTcpTable: #" << GetLastError() << endl; break;
-	case 6:  cout << "\nError GetExtendedUdpTable: #" << GetLastError() << endl; break;
-	case 7:  cout << "\nError in pcap_loop function: #" << GetLastError() << endl; break;
+	case 1:  cout << "\nError get interfaces" << endl << endl; break;
+	case 2:  cout << "\nError open interface handle" << endl << endl; break;
+	case 3:  cout << "\nError create pcap file: " << pcap_geterr(handle) << endl; break;
+	case 4:	 cout << "\nError memory allocation in malloc function" << endl << endl; break;
+	case 5:  cout << "\nError in GetExtendedTcpTable function" << endl << endl; break;
+	case 6:  cout << "\nError in GetExtendedUdpTable function" << endl << endl; break;
+	case 7:  cout << "\nError in pcap_loop function: " << pcap_geterr(handle) << endl; break;
+	case 8:  cout << "\nError in compile pcap-filter: " << pcap_geterr(handle) << endl; break;
+	case 9:  cout << "\nError in set pcap-filter: " << pcap_geterr(handle) << endl; break;
+	case 10: cout << "\nError syntax: unknown options" << endl << endl; break;
 	}
 
+	cout << endl << endl << "To EXIT press CTRL+C" << endl;
+
 	while (true) cin.get();
-	exit(code);
 }
 
 
@@ -211,13 +215,13 @@ wstring GetProcessNameByPID(DWORD pid)
 
 wstring GetTcpProcessName(IPHeader* iph, TCPHeader* tcph, wstring& enter_procname) 
 {
-	PMIB_TCPTABLE_OWNER_MODULE pTcpTable = (MIB_TCPTABLE_OWNER_MODULE*)malloc(sizeof(MIB_TCPTABLE_OWNER_MODULE));
-	DWORD dwSize = sizeof(MIB_TCPTABLE_OWNER_MODULE), dwRetVal = 0;
-	if ((dwRetVal = GetExtendedTcpTable(pTcpTable, &dwSize, true, AF_INET, TCP_TABLE_OWNER_MODULE_ALL, 0))
+	PMIB_TCPTABLE_OWNER_PID pTcpTable = (MIB_TCPTABLE_OWNER_PID*)malloc(sizeof(MIB_TCPTABLE_OWNER_PID));
+	DWORD dwSize = sizeof(MIB_TCPTABLE_OWNER_PID), dwRetVal = 0;
+	if ((dwRetVal = GetExtendedTcpTable(pTcpTable, &dwSize, true, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0))
 		== ERROR_INSUFFICIENT_BUFFER)
 	{
 		free(pTcpTable);
-		pTcpTable = (MIB_TCPTABLE_OWNER_MODULE*)malloc(dwSize);
+		pTcpTable = (MIB_TCPTABLE_OWNER_PID*)malloc(dwSize);
 		if (pTcpTable == NULL)
 		{
 			free(pTcpTable);
@@ -227,7 +231,7 @@ wstring GetTcpProcessName(IPHeader* iph, TCPHeader* tcph, wstring& enter_procnam
 
 	wstring process_name = L"Unknown process";
 
-	if ((dwRetVal = GetExtendedTcpTable(pTcpTable, &dwSize, true, AF_INET, TCP_TABLE_OWNER_MODULE_ALL, 0))
+	if ((dwRetVal = GetExtendedTcpTable(pTcpTable, &dwSize, true, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0))
 		== NO_ERROR)
 	{
 		for (int i = 0; i < (int)pTcpTable->dwNumEntries; i++)  // ищем связку IP/порт пакета в таблице соединений
@@ -393,7 +397,11 @@ void print_summary(int capture_packets, int saved_packets)
 	cout << "Captured packets: " << capture_packets << endl;       // cколько всего пакетов захватил драйвер
 
 	cout << "Saved packets to file: " << saved_packets << endl;    // сколько пакетов сохранили в файл
+
+	cout << endl << "To EXIT press CTRL+C" << endl;                // для завершения работы программы
 }
+
+
 
 wstring find_in_prev_socket(IPHeader* iph, TCPHeader* tcph)
 {
@@ -413,4 +421,65 @@ wstring find_in_prev_socket(IPHeader* iph, TCPHeader* tcph)
 		}
 
 	return L"Unknown process";
+}
+
+
+
+void print_help()
+{
+	cout << endl << endl;
+	cout << "  Order of using options and flags: ";
+	cout << "sniffer.exe [-h -D -i <interface number> -v -u -p <process name>] -f <filter expression>\n\n\n";
+
+	cout << "  -h, --help                           Show this help" << endl;
+	cout << "  -D, --list-interfaces                Show list of available interfaces" << endl;
+	cout << "  -i <interface number>                Interface number to capture (default - 1)" << endl;
+	cout << "  -v                                   Short print in single-line format (default - quite mode)" << endl;
+	cout << "  -u, --unknown                        Captute only unknown traffic, which unrelated with processes" << endl;
+	cout << "  -p, --process-name <process name>    Filtering by process_name (default - no filtering)" << endl;
+	cout << "  -f, --filter <expression>            Use expression for winpcap-filter (this argument must be the last)\n\n";
+}
+
+
+char print_ifaces(vector<string> &iface_name, vector<u_long> &iface_ip, int argc, int flag)
+{
+	pcap_if_t* interfaces, * iface;       // списки для хранения информации о доступных интерфейсах
+	char count = '1';                     // номер текущего интерфейса
+	string buf_ip;                        // буфер для хранения преобразованного IP (для inet_ntop)
+	string errbuf;                        // буфер для хранения сообщения об ошибке
+
+	// Получаем список доступных интерфейсов
+	
+	if (pcap_findalldevs(&interfaces, &errbuf[0]) == PCAP_ERROR)
+		error_exit(1);
+
+	cout << endl << endl;
+
+	if (argc <= 1)
+		cout << "Select the interface to capture:" << endl << endl;
+	
+	for (iface = interfaces; iface != NULL; iface = iface->next)
+	{
+		for (pcap_addr_t* ip = iface->addresses; ip != NULL; ip = ip->next)
+			if (ip->addr->sa_family == AF_INET)
+			{
+				if (flag != 1)
+				{
+					iface_name[count - '0'] = iface->name;                                   // сохраняем имена интерфейсов
+					iface_ip[count - '0'] = ((sockaddr_in*)ip->addr)->sin_addr.S_un.S_addr;  // сохраняем адреса интерфейсов
+				}				
+				
+				if (argc <= 1 || flag == 1)
+				{
+					cout << count << ". " << inet_ntop(AF_INET, &((sockaddr_in*)ip->addr)->sin_addr,
+						&buf_ip[0], 16) << endl;  // вывод IP-адресов в консоль
+				}					
+
+				count++;
+			}
+	}
+
+	pcap_freealldevs(interfaces);         // очищаем список с ранее полученными интерфейсами
+
+	return count;                         // возвращаем количество сохраненных интерфейсов
 }

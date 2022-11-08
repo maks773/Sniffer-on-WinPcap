@@ -21,7 +21,8 @@ using namespace std;
                                    // описание глобальных переменных
 
 
-extern u_long ip_dev;  // IP-адрес интерфейса захвата           
+extern u_long ip_dev;   // IP-адрес интерфейса захвата
+extern pcap_t* handle;  // хэндл интерфейса для захвата
 
 
                                    // описание структур
@@ -106,6 +107,11 @@ boolean isTCPSyn(TCPHeader*);                                 // проверка, устан
 void print_summary(int capture_packets, int saved_packets);   // вывод итоговой информации после захвата
 
 wstring find_in_prev_socket(IPHeader*, TCPHeader*);           // поиск информации о процессе в предыдущих пакетах
+
+void print_help();                                            // печать "help"
+
+// вывод и сохранение списка доступных для захвата интерфейсов, возвращает количество таких интерфейсов
+char print_ifaces(vector<string>&, vector<u_long>&, int argc, int flag); 
 
 // функция для сохранения в память захваченных пакетов (описание функции - в файле Sniffer.cpp)
 void process_packet(u_char*, const struct pcap_pkthdr*, const u_char*);
