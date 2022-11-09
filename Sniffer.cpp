@@ -216,7 +216,7 @@ void threadFunction(u_char* file, vector<pcap_pkthdr>& AllHeaders, vector<vector
 
 void process_packet(u_char* file, const struct pcap_pkthdr* header, const u_char* Buffer)
 {    
-	if (Buffer != NULL && header != NULL /* && header->len == header->caplen*/)
+	if (Buffer != NULL && header != NULL && header->len == header->caplen)
 	{
 		vector<u_char> temp_buf(Buffer, Buffer + header->caplen);  // преобразуем указатель захваченного пакета в вектор
 		
