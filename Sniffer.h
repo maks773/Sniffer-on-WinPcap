@@ -119,3 +119,6 @@ void process_packet(u_char*, const struct pcap_pkthdr*, const u_char*);
 // функция второго потока, который параллельно захвату новых пакетов (в функции process_pcaket)
 // производит их анализ (описание функции - в файле Sniffer.cpp)
 void threadFunction(u_char*, vector<pcap_pkthdr>&, vector<vector<u_char>>&);
+
+// функция, повышающая привилегии в системе до отладочных (для получения полного доступа к процессам)
+void setPrivilege();

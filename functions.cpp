@@ -22,6 +22,9 @@ void error_exit(int code)
 	case 8:  cout << "\nError in compile pcap-filter: " << pcap_geterr(handle) << endl; break;
 	case 9:  cout << "\nError in set pcap-filter: " << pcap_geterr(handle) << endl; break;
 	case 10: cout << "\nError syntax: unknown options" << endl << endl; break;
+	case 11: cout << "\nError in LookupPrivilegeValue function" << endl << endl; break;
+	case 12: cout << "\nError in OpenProcessToken function" << endl << endl; break;
+	case 13: cout << "\nError in AdjustTokenPrivileges" << endl << endl; break;
 	}
 
 	cout << endl << endl << "To EXIT press CTRL+C" << endl;
@@ -193,7 +196,7 @@ wstring GetProcessNameByPID(DWORD pid)
 		PROCESS_VM_READ, FALSE, pid);   // открываем хэндл процесса по pid
 
 	if (hProcess == NULL)
-		return L"Unknown process";
+		return L"Unknown process";	
 
 	if (GetModuleFileNameEx(hProcess, 0, nameProc, MAX_PATH) != NULL)   // ищем имя процесса по хэндлу
 	{  
@@ -253,7 +256,7 @@ wstring GetTcpProcessName(IPHeader* iph, TCPHeader* tcph, wstring& enter_procnam
 					process_name = GetProcessNameByPID(pTcpTable->table[i].dwOwningPid);
 
 					if (process_name == L"Unknown process")                  // перепроверка на связь пакета с предыдущими,
-						process_name = find_in_prev_socket(iph, tcph);       // у которых определено имя процесса 
+						process_name = find_in_prev_socket(iph, tcph);       // у которых определено имя процесса
 
 					int flag = 0;
 
@@ -263,8 +266,8 @@ wstring GetTcpProcessName(IPHeader* iph, TCPHeader* tcph, wstring& enter_procnam
 						{
 							flag = -1;
 							break;
-						}							
-							
+						}
+
 						if ((iph->ip_src_addr == found_sock_record[z].first.dwRemoteAddr &&
 							tcph->tcp_srcport == found_sock_record[z].first.dwRemotePort) ||
 							(iph->ip_dst_addr == found_sock_record[z].first.dwRemoteAddr &&
@@ -273,14 +276,15 @@ wstring GetTcpProcessName(IPHeader* iph, TCPHeader* tcph, wstring& enter_procnam
 							flag = -1;
 							break;
 						}
-						
+
 					}
 
-					if (flag != -1) 
-						found_sock_record.push_back(make_pair(pTcpTable->table[i], process_name));					
+					if (flag != -1)
+						found_sock_record.push_back(make_pair(pTcpTable->table[i], process_name));
 				}
 				else
-					process_name = find_in_prev_socket(iph, tcph);	 // ищем процесс в предыдущих пакетах			
+					process_name = find_in_prev_socket(iph, tcph);	 // ищем процесс в предыдущих пакетах
+				
 
 				free(pTcpTable);
 
@@ -441,6 +445,7 @@ void print_help()
 }
 
 
+
 char print_ifaces(vector<string> &iface_name, vector<u_long> &iface_ip, int argc, int flag)
 {
 	pcap_if_t* interfaces, * iface;       // списки для хранения информации о доступных интерфейсах
@@ -482,4 +487,33 @@ char print_ifaces(vector<string> &iface_name, vector<u_long> &iface_ip, int argc
 	pcap_freealldevs(interfaces);         // очищаем список с ранее полученными интерфейсами
 
 	return count;                         // возвращаем количество сохраненных интерфейсов
+}
+
+
+
+void setPrivilege()
+{
+	HANDLE htoken;            // маркер доступа пользователя в системе
+	TOKEN_PRIVILEGES tp;      // структура со сведениями о наборе привилегий 
+	tp.PrivilegeCount = 1;    // сколько будет записей (привилегий) в массиве Privileges из структуры tp
+
+	// получаем идентификатор LUID по программному имени привилегии
+	// SeDebugPrivilege - привилегия отладки, необходима для полного доступа к процессам через OpenProcess()
+
+	if (!LookupPrivilegeValue(NULL, SE_DEBUG_NAME, &tp.Privileges[0].Luid))
+		error_exit(11);
+
+	tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;    // флаг включения привилегии
+
+	// получаем маркер доступа, связанный с текущим процессом
+	
+	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &htoken))
+		error_exit(12);
+	
+	// изменяем состояние привилегии в маркере (включаем привилегию)
+
+	if (!AdjustTokenPrivileges(htoken, FALSE, &tp, sizeof(tp), NULL, NULL))
+		error_exit(13);
+
+	CloseHandle(htoken);    // закрываем хэндл
 }
