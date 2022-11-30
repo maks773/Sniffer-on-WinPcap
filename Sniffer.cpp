@@ -2,30 +2,30 @@
 using namespace std;
 
 
-int capture_packets = 0;                       // счётчик общего количества захваченных пакетов
-int saved_packets = 0;                         // счётчик количества сохраненных в файл пакетов
+int capture_packets = 0;                       // СЃС‡С‘С‚С‡РёРє РѕР±С‰РµРіРѕ РєРѕР»РёС‡РµСЃС‚РІР° Р·Р°С…РІР°С‡РµРЅРЅС‹С… РїР°РєРµС‚РѕРІ
+int saved_packets = 0;                         // СЃС‡С‘С‚С‡РёРє РєРѕР»РёС‡РµСЃС‚РІР° СЃРѕС…СЂР°РЅРµРЅРЅС‹С… РІ С„Р°Р№Р» РїР°РєРµС‚РѕРІ
 
-vector<pcap_pkthdr> AllHeaders;                // для хранения pcap-заголовков захваченных пакетов
-vector<vector<u_char>> AllPackets;             // для хранения содержимого захвачененых пакетов
+vector<pcap_pkthdr> AllHeaders;                // РґР»СЏ С…СЂР°РЅРµРЅРёСЏ pcap-Р·Р°РіРѕР»РѕРІРєРѕРІ Р·Р°С…РІР°С‡РµРЅРЅС‹С… РїР°РєРµС‚РѕРІ
+vector<vector<u_char>> AllPackets;             // РґР»СЏ С…СЂР°РЅРµРЅРёСЏ СЃРѕРґРµСЂР¶РёРјРѕРіРѕ Р·Р°С…РІР°С‡РµРЅРµРЅС‹С… РїР°РєРµС‚РѕРІ
 
-int thread_flag = 0;                           // флаг состояния потока (1 - запущен, 0 - не запущен)
-int close_flag = 0;                            // флаг состояния _kbhit (была остановка захвата или нет)
+int thread_flag = 0;                           // С„Р»Р°Рі СЃРѕСЃС‚РѕСЏРЅРёСЏ РїРѕС‚РѕРєР° (1 - Р·Р°РїСѓС‰РµРЅ, 0 - РЅРµ Р·Р°РїСѓС‰РµРЅ)
+int close_flag = 0;                            // С„Р»Р°Рі СЃРѕСЃС‚РѕСЏРЅРёСЏ _kbhit (Р±С‹Р»Р° РѕСЃС‚Р°РЅРѕРІРєР° Р·Р°С…РІР°С‚Р° РёР»Рё РЅРµС‚)
 
-wstring enter_procname = L"NULL";              // для хранения введенного с консоли имени процесса
-char num = '2';                                // для хранения введенного номера при диалоговом режиме
-pcap_t* handle;                                // хэндл интерфейса для захвата
-mutex m;                                       // мьютекс для синхронизации потоков
-u_long ip_dev;                                 // для хранения IP-адреса выбранного интерфейса захвата
+wstring enter_procname = L"NULL";              // РґР»СЏ С…СЂР°РЅРµРЅРёСЏ РІРІРµРґРµРЅРЅРѕРіРѕ СЃ РєРѕРЅСЃРѕР»Рё РёРјРµРЅРё РїСЂРѕС†РµСЃСЃР°
+char num = '2';                                // РґР»СЏ С…СЂР°РЅРµРЅРёСЏ РІРІРµРґРµРЅРЅРѕРіРѕ РЅРѕРјРµСЂР° РїСЂРё РґРёР°Р»РѕРіРѕРІРѕРј СЂРµР¶РёРјРµ
+pcap_t* handle;                                // С…СЌРЅРґР» РёРЅС‚РµСЂС„РµР№СЃР° РґР»СЏ Р·Р°С…РІР°С‚Р°
+mutex m;                                       // РјСЊСЋС‚РµРєСЃ РґР»СЏ СЃРёРЅС…СЂРѕРЅРёР·Р°С†РёРё РїРѕС‚РѕРєРѕРІ
+u_long ip_dev;                                 // РґР»СЏ С…СЂР°РЅРµРЅРёСЏ IP-Р°РґСЂРµСЃР° РІС‹Р±СЂР°РЅРЅРѕРіРѕ РёРЅС‚РµСЂС„РµР№СЃР° Р·Р°С…РІР°С‚Р°
 
 
 void threadFunction2()
 {
-	while (1)                                  // ожидаем остановку захвата пользователем
+	while (1)                                  // РѕР¶РёРґР°РµРј РѕСЃС‚Р°РЅРѕРІРєСѓ Р·Р°С…РІР°С‚Р° РїРѕР»СЊР·РѕРІР°С‚РµР»РµРј
 	{
 		if (_kbhit())
 		{
-			pcap_breakloop(handle);            // прерываем захват новых пакетов
-			close_flag = 1;		               // устанавливаем флаг завершения работы программы
+			pcap_breakloop(handle);            // РїСЂРµСЂС‹РІР°РµРј Р·Р°С…РІР°С‚ РЅРѕРІС‹С… РїР°РєРµС‚РѕРІ
+			close_flag = 1;		               // СѓСЃС‚Р°РЅР°РІР»РёРІР°РµРј С„Р»Р°Рі Р·Р°РІРµСЂС€РµРЅРёСЏ СЂР°Р±РѕС‚С‹ РїСЂРѕРіСЂР°РјРјС‹
 			return;
 		}
 	}
@@ -34,161 +34,161 @@ void threadFunction2()
 
 void threadFunction(u_char* file, vector<pcap_pkthdr>& AllHeaders, vector<vector<u_char>>& AllPackets)
 {	
-	int dns_flag = 2;                // флаг-идентификатор dns-пакета 
-	int t = 0;                       // счётчик DNS-пакетов
-	int syn_flag = 0;                // счётчик TCPsyn-пакетов
-	vector<int> dns_numbers;         // для хранения номеров DNS-пакетов
-	vector<temp_buf> Temp(65535);    // для хранения содержимого DNS-пакетов
+	int dns_flag = 2;                // С„Р»Р°Рі-РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ dns-РїР°РєРµС‚Р° 
+	int t = 0;                       // СЃС‡С‘С‚С‡РёРє DNS-РїР°РєРµС‚РѕРІ
+	int syn_flag = 0;                // СЃС‡С‘С‚С‡РёРє TCPsyn-РїР°РєРµС‚РѕРІ
+	vector<int> dns_numbers;         // РґР»СЏ С…СЂР°РЅРµРЅРёСЏ РЅРѕРјРµСЂРѕРІ DNS-РїР°РєРµС‚РѕРІ
+	vector<temp_buf> Temp(65535);    // РґР»СЏ С…СЂР°РЅРµРЅРёСЏ СЃРѕРґРµСЂР¶РёРјРѕРіРѕ DNS-РїР°РєРµС‚РѕРІ
 	
-	for (int i = 0; ; i++)           // начинаем анализ каждого захваченного пакета
+	for (int i = 0; ; i++)           // РЅР°С‡РёРЅР°РµРј Р°РЅР°Р»РёР· РєР°Р¶РґРѕРіРѕ Р·Р°С…РІР°С‡РµРЅРЅРѕРіРѕ РїР°РєРµС‚Р°
 	{	
 		while (i >= capture_packets)             
 		{
-			if (close_flag == 1)                  // если проанализированы все захваченные пакеты и был нажат <enter>,
-			{                                     // то завершаем работу программы
-				print_summary(capture_packets, saved_packets);   // печать итоговой информации после захвата
+			if (close_flag == 1)                  // РµСЃР»Рё РїСЂРѕР°РЅР°Р»РёР·РёСЂРѕРІР°РЅС‹ РІСЃРµ Р·Р°С…РІР°С‡РµРЅРЅС‹Рµ РїР°РєРµС‚С‹ Рё Р±С‹Р» РЅР°Р¶Р°С‚ <enter>,
+			{                                     // С‚Рѕ Р·Р°РІРµСЂС€Р°РµРј СЂР°Р±РѕС‚Сѓ РїСЂРѕРіСЂР°РјРјС‹
+				print_summary(capture_packets, saved_packets);   // РїРµС‡Р°С‚СЊ РёС‚РѕРіРѕРІРѕР№ РёРЅС„РѕСЂРјР°С†РёРё РїРѕСЃР»Рµ Р·Р°С…РІР°С‚Р°
 				return;                    
-			}				                      // если проанализированы все пакеты, а новые ещё не были захвачены,
-			else                                  // то приостанавливаем поток, чтобы не завершился цикл, т.е.
-				this_thread::sleep_for(chrono::milliseconds(1)); // ждём нажатие <enter> либо поступление новых пакетов
+			}				                      // РµСЃР»Рё РїСЂРѕР°РЅР°Р»РёР·РёСЂРѕРІР°РЅС‹ РІСЃРµ РїР°РєРµС‚С‹, Р° РЅРѕРІС‹Рµ РµС‰С‘ РЅРµ Р±С‹Р»Рё Р·Р°С…РІР°С‡РµРЅС‹,
+			else                                  // С‚Рѕ РїСЂРёРѕСЃС‚Р°РЅР°РІР»РёРІР°РµРј РїРѕС‚РѕРє, С‡С‚РѕР±С‹ РЅРµ Р·Р°РІРµСЂС€РёР»СЃСЏ С†РёРєР», С‚.Рµ.
+				this_thread::sleep_for(chrono::milliseconds(1)); // Р¶РґС‘Рј РЅР°Р¶Р°С‚РёРµ <enter> Р»РёР±Рѕ РїРѕСЃС‚СѓРїР»РµРЅРёРµ РЅРѕРІС‹С… РїР°РєРµС‚РѕРІ
 		}
 		
 		m.lock();
 
-		pcap_pkthdr AllHeaders_item = AllHeaders[i];       // сохраняем pcap-заголовок пакета
-		vector<u_char> AllPackets_item = AllPackets[i];	   // сохраняем содержимое пакета
+		pcap_pkthdr AllHeaders_item = AllHeaders[i];       // СЃРѕС…СЂР°РЅСЏРµРј pcap-Р·Р°РіРѕР»РѕРІРѕРє РїР°РєРµС‚Р°
+		vector<u_char> AllPackets_item = AllPackets[i];	   // СЃРѕС…СЂР°РЅСЏРµРј СЃРѕРґРµСЂР¶РёРјРѕРµ РїР°РєРµС‚Р°
 
 		m.unlock();
 
-		// для хранения заголовков IP, TCP, UDP
+		// РґР»СЏ С…СЂР°РЅРµРЅРёСЏ Р·Р°РіРѕР»РѕРІРєРѕРІ IP, TCP, UDP
 		IPHeader* iph = NULL;  TCPHeader* tcph = NULL;  UDPHeader* udph = NULL;
 
-		wstring process_name = L"Unknown process";             // для хранения имени процесса
-		wstring dns_proc_name = L"Unknown process";            // для хранения имени процесса dns-пакета 
+		wstring process_name = L"Unknown process";             // РґР»СЏ С…СЂР°РЅРµРЅРёСЏ РёРјРµРЅРё РїСЂРѕС†РµСЃСЃР°
+		wstring dns_proc_name = L"Unknown process";            // РґР»СЏ С…СЂР°РЅРµРЅРёСЏ РёРјРµРЅРё РїСЂРѕС†РµСЃСЃР° dns-РїР°РєРµС‚Р° 
 
-		iph = (IPHeader*)(&AllPackets_item[0] + 14);           // выделяем заголовок IP
-		UINT ip_hlen = (UINT)((iph->ip_ver_hlen & 15) * 4);    // длина IP-заголовка
+		iph = (IPHeader*)(&AllPackets_item[0] + 14);           // РІС‹РґРµР»СЏРµРј Р·Р°РіРѕР»РѕРІРѕРє IP
+		UINT ip_hlen = (UINT)((iph->ip_ver_hlen & 15) * 4);    // РґР»РёРЅР° IP-Р·Р°РіРѕР»РѕРІРєР°
 		
 		if (iph->ip_protocol == IPPROTO_TCP)
 		{
-			tcph = (TCPHeader*)(&AllPackets_item[0] + 14 + ip_hlen);      // выделяем заголовок TCP
-			process_name = GetTcpProcessName(iph, tcph, enter_procname);  // ищем связь пакета с процессом в ОС
+			tcph = (TCPHeader*)(&AllPackets_item[0] + 14 + ip_hlen);      // РІС‹РґРµР»СЏРµРј Р·Р°РіРѕР»РѕРІРѕРє TCP
+			process_name = GetTcpProcessName(iph, tcph, enter_procname);  // РёС‰РµРј СЃРІСЏР·СЊ РїР°РєРµС‚Р° СЃ РїСЂРѕС†РµСЃСЃРѕРј РІ РћРЎ
 		}
 		else if (iph->ip_protocol == IPPROTO_UDP)
 		{
-			udph = (UDPHeader*)(&AllPackets_item[0] + 14 + ip_hlen);      // выделяем заголовок UDP
-			process_name = GetUdpProcessName(iph, udph, enter_procname);  // ищем связь пакета с процессом в ОС
+			udph = (UDPHeader*)(&AllPackets_item[0] + 14 + ip_hlen);      // РІС‹РґРµР»СЏРµРј Р·Р°РіРѕР»РѕРІРѕРє UDP
+			process_name = GetUdpProcessName(iph, udph, enter_procname);  // РёС‰РµРј СЃРІСЏР·СЊ РїР°РєРµС‚Р° СЃ РїСЂРѕС†РµСЃСЃРѕРј РІ РћРЎ
 		}
 		else
-			continue;    // если это не пакет TCP или UDP, то переходим к анализу следующего пакета
+			continue;    // РµСЃР»Рё СЌС‚Рѕ РЅРµ РїР°РєРµС‚ TCP РёР»Рё UDP, С‚Рѕ РїРµСЂРµС…РѕРґРёРј Рє Р°РЅР°Р»РёР·Сѓ СЃР»РµРґСѓСЋС‰РµРіРѕ РїР°РєРµС‚Р°
 		
-		int is_dns = isDNS(tcph, udph);      // проверка, относится пакет к DNS (0,1) или нет (2)  
+		int is_dns = isDNS(tcph, udph);      // РїСЂРѕРІРµСЂРєР°, РѕС‚РЅРѕСЃРёС‚СЃСЏ РїР°РєРµС‚ Рє DNS (0,1) РёР»Рё РЅРµС‚ (2)  
 
 		if (is_dns != 2)                     
 		{
-			dns_numbers.push_back(i);        // запоминаем номер каждого DNS-пакета
+			dns_numbers.push_back(i);        // Р·Р°РїРѕРјРёРЅР°РµРј РЅРѕРјРµСЂ РєР°Р¶РґРѕРіРѕ DNS-РїР°РєРµС‚Р°
 			
-			Temp[t].ipheader = *iph;		 // запоминаем его заголовок IP	
+			Temp[t].ipheader = *iph;		 // Р·Р°РїРѕРјРёРЅР°РµРј РµРіРѕ Р·Р°РіРѕР»РѕРІРѕРє IP	
 
 			if (udph != NULL)
-				Temp[t].udpheader = *udph;   // запоминаем его заголовок UDP
+				Temp[t].udpheader = *udph;   // Р·Р°РїРѕРјРёРЅР°РµРј РµРіРѕ Р·Р°РіРѕР»РѕРІРѕРє UDP
 			else if (tcph != NULL)
-				Temp[t].tcpheader = *tcph;   // TCP неактуально для DNS, но на всякий случай пусть будет
+				Temp[t].tcpheader = *tcph;   // TCP РЅРµР°РєС‚СѓР°Р»СЊРЅРѕ РґР»СЏ DNS, РЅРѕ РЅР° РІСЃСЏРєРёР№ СЃР»СѓС‡Р°Р№ РїСѓСЃС‚СЊ Р±СѓРґРµС‚
 
-			t++;			                 // итерация счётчика захваченных DNS-пакетов
+			t++;			                 // РёС‚РµСЂР°С†РёСЏ СЃС‡С‘С‚С‡РёРєР° Р·Р°С…РІР°С‡РµРЅРЅС‹С… DNS-РїР°РєРµС‚РѕРІ
 
 			if (is_dns == 0)
-				dns_flag = 0;                // DNS-запрос
+				dns_flag = 0;                // DNS-Р·Р°РїСЂРѕСЃ
 			else
-				dns_flag = 1;                // DNS-ответ
+				dns_flag = 1;                // DNS-РѕС‚РІРµС‚
 		}
 		
-		if (dns_flag == 1 && isTCPSyn(tcph))      // ищем первый пакет TCP-syn после DNS-ответа
+		if (dns_flag == 1 && isTCPSyn(tcph))      // РёС‰РµРј РїРµСЂРІС‹Р№ РїР°РєРµС‚ TCP-syn РїРѕСЃР»Рµ DNS-РѕС‚РІРµС‚Р°
 		{
-			string buf_ip;                   // буфер для хранения IP-адреса (для функции inet_ntop)			
-			string temp;                     // хранит октет IP-адреса в виде строки
-			vector<int> temp_ip(4, 0);       // хранит IP-адрес в виде четырёх чисел
-			int j = 0;                       // переменная-счётчик для циклов
+			string buf_ip;                   // Р±СѓС„РµСЂ РґР»СЏ С…СЂР°РЅРµРЅРёСЏ IP-Р°РґСЂРµСЃР° (РґР»СЏ С„СѓРЅРєС†РёРё inet_ntop)			
+			string temp;                     // С…СЂР°РЅРёС‚ РѕРєС‚РµС‚ IP-Р°РґСЂРµСЃР° РІ РІРёРґРµ СЃС‚СЂРѕРєРё
+			vector<int> temp_ip(4, 0);       // С…СЂР°РЅРёС‚ IP-Р°РґСЂРµСЃ РІ РІРёРґРµ С‡РµС‚С‹СЂС‘С… С‡РёСЃРµР»
+			int j = 0;                       // РїРµСЂРµРјРµРЅРЅР°СЏ-СЃС‡С‘С‚С‡РёРє РґР»СЏ С†РёРєР»РѕРІ
 
-			// преобразуем IP-адрес в строку
+			// РїСЂРµРѕР±СЂР°Р·СѓРµРј IP-Р°РґСЂРµСЃ РІ СЃС‚СЂРѕРєСѓ
 			inet_ntop(AF_INET, &iph->ip_dst_addr, &buf_ip[0], 16);
 
 			stringstream stream(buf_ip);
 			while (getline(stream, temp, '.'))
 			{
-				temp_ip[j] = stoi(temp);     // перевод IP-адреса назначния в формат вектора из четырёх чисел
+				temp_ip[j] = stoi(temp);     // РїРµСЂРµРІРѕРґ IP-Р°РґСЂРµСЃР° РЅР°Р·РЅР°С‡РЅРёСЏ РІ С„РѕСЂРјР°С‚ РІРµРєС‚РѕСЂР° РёР· С‡РµС‚С‹СЂС‘С… С‡РёСЃРµР»
 				j++;
 			}
 
 			for (int z = dns_numbers.size() - 1; z >= 0; z--)
 			{
-				// перевод содержимого DNS-пакета в формат кодов символов (int)
+				// РїРµСЂРµРІРѕРґ СЃРѕРґРµСЂР¶РёРјРѕРіРѕ DNS-РїР°РєРµС‚Р° РІ С„РѕСЂРјР°С‚ РєРѕРґРѕРІ СЃРёРјРІРѕР»РѕРІ (int)
 
 				vector<int> int_pack(AllPackets[dns_numbers[z]].size());  	
 
 				for (j = 0; j < int_pack.size(); j++)
 					int_pack[j] = AllPackets[dns_numbers[z]][j];
 
-				// поиск IP адреса назначния TCP-syn пакета в DNS-пакете (так как после DNS-ответа
-				// идёт пакет TCP c установкой соединения по одному из полученных адресов)
+				// РїРѕРёСЃРє IP Р°РґСЂРµСЃР° РЅР°Р·РЅР°С‡РЅРёСЏ TCP-syn РїР°РєРµС‚Р° РІ DNS-РїР°РєРµС‚Рµ (С‚Р°Рє РєР°Рє РїРѕСЃР»Рµ DNS-РѕС‚РІРµС‚Р°
+				// РёРґС‘С‚ РїР°РєРµС‚ TCP c СѓСЃС‚Р°РЅРѕРІРєРѕР№ СЃРѕРµРґРёРЅРµРЅРёСЏ РїРѕ РѕРґРЅРѕРјСѓ РёР· РїРѕР»СѓС‡РµРЅРЅС‹С… Р°РґСЂРµСЃРѕРІ)
 
 				auto it = search(int_pack.begin(), int_pack.end(), temp_ip.begin(), temp_ip.end());
 
-				if (it != int_pack.end())          // если IP успешно найден, то захваченные DNS-пакеты связаны
-				{                                  // с процессом этого TCP-пакета
+				if (it != int_pack.end())          // РµСЃР»Рё IP СѓСЃРїРµС€РЅРѕ РЅР°Р№РґРµРЅ, С‚Рѕ Р·Р°С…РІР°С‡РµРЅРЅС‹Рµ DNS-РїР°РєРµС‚С‹ СЃРІСЏР·Р°РЅС‹
+				{                                  // СЃ РїСЂРѕС†РµСЃСЃРѕРј СЌС‚РѕРіРѕ TCP-РїР°РєРµС‚Р°
 					dns_proc_name = process_name;
 					syn_flag = 5;
 					break;
 				}			
 			}
 
-			if (syn_flag != 5)  // предполагается, что IP из DNS-ответа является IP-адресом назначения ближайших   
-				syn_flag++;     // 5-и TCPsyn-пакетов (если нет, то выведем потом dns-пакеты как unknown process)
+			if (syn_flag != 5)  // РїСЂРµРґРїРѕР»Р°РіР°РµС‚СЃСЏ, С‡С‚Рѕ IP РёР· DNS-РѕС‚РІРµС‚Р° СЏРІР»СЏРµС‚СЃСЏ IP-Р°РґСЂРµСЃРѕРј РЅР°Р·РЅР°С‡РµРЅРёСЏ Р±Р»РёР¶Р°Р№С€РёС…   
+				syn_flag++;     // 5-Рё TCPsyn-РїР°РєРµС‚РѕРІ (РµСЃР»Рё РЅРµС‚, С‚Рѕ РІС‹РІРµРґРµРј РїРѕС‚РѕРј dns-РїР°РєРµС‚С‹ РєР°Рє unknown process)
 
 			if (syn_flag >= 5)
 			{
 				if (enter_procname == L"NULL" || enter_procname == dns_proc_name)
 
-					for (j = 0; j < dns_numbers.size(); j++)    // выводим сохраненные DNS-пакеты
+					for (j = 0; j < dns_numbers.size(); j++)    // РІС‹РІРѕРґРёРј СЃРѕС…СЂР°РЅРµРЅРЅС‹Рµ DNS-РїР°РєРµС‚С‹
 					{
-						saved_packets++;         // увеличиваем счетчик сохраненных пакетов
+						saved_packets++;         // СѓРІРµР»РёС‡РёРІР°РµРј СЃС‡РµС‚С‡РёРє СЃРѕС…СЂР°РЅРµРЅРЅС‹С… РїР°РєРµС‚РѕРІ
 
-						if (num == '1')          // выводим пакет в консоль
+						if (num == '1')          // РІС‹РІРѕРґРёРј РїР°РєРµС‚ РІ РєРѕРЅСЃРѕР»СЊ
 							print_info(saved_packets, &Temp[j].ipheader, &Temp[j].tcpheader,
 								&Temp[j].udpheader, dns_proc_name);
 
-						wstring dns_proc_name1 = L"prc_name:" + dns_proc_name;  // сигнатура для диссектора Wireshark
+						wstring dns_proc_name1 = L"prc_name:" + dns_proc_name;  // СЃРёРіРЅР°С‚СѓСЂР° РґР»СЏ РґРёСЃСЃРµРєС‚РѕСЂР° Wireshark
 
 						m.lock();
 
-						// резервируем для вектора дополнительную память
+						// СЂРµР·РµСЂРІРёСЂСѓРµРј РґР»СЏ РІРµРєС‚РѕСЂР° РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅСѓСЋ РїР°РјСЏС‚СЊ
 						AllPackets[dns_numbers[j]].reserve(65535 + 1000);
 
-						// вставляем в конец пакета имя процесса
+						// РІСЃС‚Р°РІР»СЏРµРј РІ РєРѕРЅРµС† РїР°РєРµС‚Р° РёРјСЏ РїСЂРѕС†РµСЃСЃР°
 						AllPackets[dns_numbers[j]].insert(AllPackets[dns_numbers[j]].begin()
 							+ AllHeaders[dns_numbers[j]].caplen, dns_proc_name1.begin(), dns_proc_name1.end());
 
-						// корректируем длину пакета в pcap-заголовке
+						// РєРѕСЂСЂРµРєС‚РёСЂСѓРµРј РґР»РёРЅСѓ РїР°РєРµС‚Р° РІ pcap-Р·Р°РіРѕР»РѕРІРєРµ
 						AllHeaders[dns_numbers[j]].caplen = AllHeaders[dns_numbers[j]].caplen + dns_proc_name1.size();
 						AllHeaders[dns_numbers[j]].len = AllHeaders[dns_numbers[j]].caplen;
 
-						// записываем пакет в файл
+						// Р·Р°РїРёСЃС‹РІР°РµРј РїР°РєРµС‚ РІ С„Р°Р№Р»
 						pcap_dump(file, &AllHeaders[dns_numbers[j]], &AllPackets[dns_numbers[j]][0]);
 
 						m.unlock();
 					}
 
-			    dns_numbers.clear();  // очищаем вектор с номерами DNS-пакетов
-			    dns_flag = 2;         // устанавливаем флаг в начальное состояние
-			    t = 0;                // обнуляем счетчик DNS-пакетов
-				syn_flag = 0;         // обнуляем счетчик TCPsyn-пакетов
+			    dns_numbers.clear();  // РѕС‡РёС‰Р°РµРј РІРµРєС‚РѕСЂ СЃ РЅРѕРјРµСЂР°РјРё DNS-РїР°РєРµС‚РѕРІ
+			    dns_flag = 2;         // СѓСЃС‚Р°РЅР°РІР»РёРІР°РµРј С„Р»Р°Рі РІ РЅР°С‡Р°Р»СЊРЅРѕРµ СЃРѕСЃС‚РѕСЏРЅРёРµ
+			    t = 0;                // РѕР±РЅСѓР»СЏРµРј СЃС‡РµС‚С‡РёРє DNS-РїР°РєРµС‚РѕРІ
+				syn_flag = 0;         // РѕР±РЅСѓР»СЏРµРј СЃС‡РµС‚С‡РёРє TCPsyn-РїР°РєРµС‚РѕРІ
 			}
 		}
-		else if (is_dns != 2) continue;  // если после DNS-ответа идут сразу другие DNS-пакеты, а не TCP-syn, то
-		                                 // переходим к их анализу (сохранению) 
+		else if (is_dns != 2) continue;  // РµСЃР»Рё РїРѕСЃР»Рµ DNS-РѕС‚РІРµС‚Р° РёРґСѓС‚ СЃСЂР°Р·Сѓ РґСЂСѓРіРёРµ DNS-РїР°РєРµС‚С‹, Р° РЅРµ TCP-syn, С‚Рѕ
+		                                 // РїРµСЂРµС…РѕРґРёРј Рє РёС… Р°РЅР°Р»РёР·Сѓ (СЃРѕС…СЂР°РЅРµРЅРёСЋ) 
 
 
-		// если пакет не DNS, то сразу выводим его, так как имя процесса для него определяется в этой же итерации
+		// РµСЃР»Рё РїР°РєРµС‚ РЅРµ DNS, С‚Рѕ СЃСЂР°Р·Сѓ РІС‹РІРѕРґРёРј РµРіРѕ, С‚Р°Рє РєР°Рє РёРјСЏ РїСЂРѕС†РµСЃСЃР° РґР»СЏ РЅРµРіРѕ РѕРїСЂРµРґРµР»СЏРµС‚СЃСЏ РІ СЌС‚РѕР№ Р¶Рµ РёС‚РµСЂР°С†РёРё
 
 		if ((enter_procname == L"NULL" || enter_procname == process_name) && process_name != L"Reject")
 		{
@@ -197,7 +197,7 @@ void threadFunction(u_char* file, vector<pcap_pkthdr>& AllHeaders, vector<vector
 			if (num == '1')              
 				print_info(saved_packets, iph, tcph, udph, process_name);
 
-			process_name = L"prc_name:" + process_name;  // вcтавляем сигнатуру для диссектора Wireshark
+			process_name = L"prc_name:" + process_name;  // РІcС‚Р°РІР»СЏРµРј СЃРёРіРЅР°С‚СѓСЂСѓ РґР»СЏ РґРёСЃСЃРµРєС‚РѕСЂР° Wireshark
 
 			AllPackets_item.reserve(65535 + 1000);
 
@@ -218,22 +218,22 @@ void process_packet(u_char* file, const struct pcap_pkthdr* header, const u_char
 {    
 	if (Buffer != NULL && header != NULL && header->len == header->caplen)
 	{
-		vector<u_char> temp_buf(Buffer, Buffer + header->caplen);  // преобразуем указатель захваченного пакета в вектор
+		vector<u_char> temp_buf(Buffer, Buffer + header->caplen);  // РїСЂРµРѕР±СЂР°Р·СѓРµРј СѓРєР°Р·Р°С‚РµР»СЊ Р·Р°С…РІР°С‡РµРЅРЅРѕРіРѕ РїР°РєРµС‚Р° РІ РІРµРєС‚РѕСЂ
 		
 		m.lock();
 
-		AllPackets.push_back(temp_buf);                            // сохраняем каждый захваченный пакет
-		AllHeaders.push_back(*header);                             // сохраняем каждый захваченный pcap-заголовок пакета  
-		capture_packets++;		                                   // увеличиваем счётчик захваченных пакетов	
+		AllPackets.push_back(temp_buf);                            // СЃРѕС…СЂР°РЅСЏРµРј РєР°Р¶РґС‹Р№ Р·Р°С…РІР°С‡РµРЅРЅС‹Р№ РїР°РєРµС‚
+		AllHeaders.push_back(*header);                             // СЃРѕС…СЂР°РЅСЏРµРј РєР°Р¶РґС‹Р№ Р·Р°С…РІР°С‡РµРЅРЅС‹Р№ pcap-Р·Р°РіРѕР»РѕРІРѕРє РїР°РєРµС‚Р°  
+		capture_packets++;		                                   // СѓРІРµР»РёС‡РёРІР°РµРј СЃС‡С‘С‚С‡РёРє Р·Р°С…РІР°С‡РµРЅРЅС‹С… РїР°РєРµС‚РѕРІ	
 
 		m.unlock();
 
-		if (thread_flag != 1)                                      // запускаем поток для анализа пакетов
+		if (thread_flag != 1)                                      // Р·Р°РїСѓСЃРєР°РµРј РїРѕС‚РѕРє РґР»СЏ Р°РЅР°Р»РёР·Р° РїР°РєРµС‚РѕРІ
 		{                                                          
 			thread_flag = 1;
 			thread thr(threadFunction, file, ref(AllHeaders), ref(AllPackets));
-			SetThreadPriority(thr.native_handle(), 2);             // повышаем приоритет потока
-			thr.detach();                                          // поток работаем параллельно (пущен на "самотек")
+			SetThreadPriority(thr.native_handle(), 2);             // РїРѕРІС‹С€Р°РµРј РїСЂРёРѕСЂРёС‚РµС‚ РїРѕС‚РѕРєР°
+			thr.detach();                                          // РїРѕС‚РѕРє СЂР°Р±РѕС‚Р°РµРј РїР°СЂР°Р»Р»РµР»СЊРЅРѕ (РїСѓС‰РµРЅ РЅР° "СЃР°РјРѕС‚РµРє")
 		}
 	}
 }
@@ -241,23 +241,23 @@ void process_packet(u_char* file, const struct pcap_pkthdr* header, const u_char
 
 int main(int argc, char *argv[])
 {
-	string errbuf;                       // буфер для хранения сообщения об ошибке
-	vector<string> iface_name(100);      // буфер для хранения имён интерфейсов
-	vector<u_long> iface_ip(100);        // буфер для хранения адресов интерфейсов 
-	char count = '1';                    // количество доступных для захвата интерфейсов
-	char iface_num = '1';                // номер выбранного интерфейса (1 - по умолчанию)	
-	string wpcap_filter = "";            // буфер для хранения выражения winpcap фильтра
-	int filter_flag = 0;                 // флаг (1 - в консоли есть аргумент для winpcap фильтра)
-	bpf_program fp;                      // скомпилированный winpcap-фильтр
+	string errbuf;                       // Р±СѓС„РµСЂ РґР»СЏ С…СЂР°РЅРµРЅРёСЏ СЃРѕРѕР±С‰РµРЅРёСЏ РѕР± РѕС€РёР±РєРµ
+	vector<string> iface_name(100);      // Р±СѓС„РµСЂ РґР»СЏ С…СЂР°РЅРµРЅРёСЏ РёРјС‘РЅ РёРЅС‚РµСЂС„РµР№СЃРѕРІ
+	vector<u_long> iface_ip(100);        // Р±СѓС„РµСЂ РґР»СЏ С…СЂР°РЅРµРЅРёСЏ Р°РґСЂРµСЃРѕРІ РёРЅС‚РµСЂС„РµР№СЃРѕРІ 
+	char count = '1';                    // РєРѕР»РёС‡РµСЃС‚РІРѕ РґРѕСЃС‚СѓРїРЅС‹С… РґР»СЏ Р·Р°С…РІР°С‚Р° РёРЅС‚РµСЂС„РµР№СЃРѕРІ
+	char iface_num = '1';                // РЅРѕРјРµСЂ РІС‹Р±СЂР°РЅРЅРѕРіРѕ РёРЅС‚РµСЂС„РµР№СЃР° (1 - РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ)	
+	string wpcap_filter = "";            // Р±СѓС„РµСЂ РґР»СЏ С…СЂР°РЅРµРЅРёСЏ РІС‹СЂР°Р¶РµРЅРёСЏ winpcap С„РёР»СЊС‚СЂР°
+	int filter_flag = 0;                 // С„Р»Р°Рі (1 - РІ РєРѕРЅСЃРѕР»Рё РµСЃС‚СЊ Р°СЂРіСѓРјРµРЅС‚ РґР»СЏ winpcap С„РёР»СЊС‚СЂР°)
+	bpf_program fp;                      // СЃРєРѕРјРїРёР»РёСЂРѕРІР°РЅРЅС‹Р№ winpcap-С„РёР»СЊС‚СЂ
 
 
-	if (argc > 1)                        // разбор аргументов командной строки
+	if (argc > 1)                        // СЂР°Р·Р±РѕСЂ Р°СЂРіСѓРјРµРЅС‚РѕРІ РєРѕРјР°РЅРґРЅРѕР№ СЃС‚СЂРѕРєРё
 	{
-		int arg_flag = 0;                // флаг (1 - аргумент, требующий ввода данных)
+		int arg_flag = 0;                // С„Р»Р°Рі (1 - Р°СЂРіСѓРјРµРЅС‚, С‚СЂРµР±СѓСЋС‰РёР№ РІРІРѕРґР° РґР°РЅРЅС‹С…)
 		
 		for (int i = 0; i < argc; i++)
 		{
-			if (filter_flag == 1)        // cохраняем выражение фильтра после аргумента -f
+			if (filter_flag == 1)        // cРѕС…СЂР°РЅСЏРµРј РІС‹СЂР°Р¶РµРЅРёРµ С„РёР»СЊС‚СЂР° РїРѕСЃР»Рµ Р°СЂРіСѓРјРµРЅС‚Р° -f
 			{
 				wpcap_filter = wpcap_filter + string(argv[i]) + " ";
 				continue;
@@ -265,23 +265,23 @@ int main(int argc, char *argv[])
 			
 			if (string(argv[i]) == "--help" || string(argv[i]) == "-h")
 			{
-				print_help();            // вывод help
+				print_help();            // РІС‹РІРѕРґ help
 				exit(0);
 			} else
 
 			if (string(argv[i]) == "--list-interfaces" || string(argv[i]) == "-D")
 			{
-				print_ifaces(iface_name, iface_ip, argc, 1);   // вывод списка доступных для захвата интерфейсов
+				print_ifaces(iface_name, iface_ip, argc, 1);   // РІС‹РІРѕРґ СЃРїРёСЃРєР° РґРѕСЃС‚СѓРїРЅС‹С… РґР»СЏ Р·Р°С…РІР°С‚Р° РёРЅС‚РµСЂС„РµР№СЃРѕРІ
 				exit(0);
 			} else				
 
-			if (string(argv[i]) == "-i" && i < argc - 1)       // считываем номер интерфейса для захвата
+			if (string(argv[i]) == "-i" && i < argc - 1)       // СЃС‡РёС‚С‹РІР°РµРј РЅРѕРјРµСЂ РёРЅС‚РµСЂС„РµР№СЃР° РґР»СЏ Р·Р°С…РІР°С‚Р°
 			{
 				iface_num = argv[i+1][0];
 				arg_flag = 1;
 			} else	
 			 
-			if (string(argv[i]) == "-v")                       // режим работы с выводом пакетов в консоль
+			if (string(argv[i]) == "-v")                       // СЂРµР¶РёРј СЂР°Р±РѕС‚С‹ СЃ РІС‹РІРѕРґРѕРј РїР°РєРµС‚РѕРІ РІ РєРѕРЅСЃРѕР»СЊ
 			{
 				num = '1';
 				arg_flag = 0;
@@ -289,19 +289,19 @@ int main(int argc, char *argv[])
 
 			if (string(argv[i]) == "-u" || string(argv[i]) == "--unknown") 
 			{
-				enter_procname = L"Unknown process";           // для захвата неопознанного по процессам трафика
+				enter_procname = L"Unknown process";           // РґР»СЏ Р·Р°С…РІР°С‚Р° РЅРµРѕРїРѕР·РЅР°РЅРЅРѕРіРѕ РїРѕ РїСЂРѕС†РµСЃСЃР°Рј С‚СЂР°С„РёРєР°
 				arg_flag = 0;
 			} else				
 
 			if ((string(argv[i]) == "-p" || string(argv[i]) == "--process-name") && i < argc - 1)
 			{
-				string temp(argv[i + 1]);                      // считываем имя процесса для фильтрации
+				string temp(argv[i + 1]);                      // СЃС‡РёС‚С‹РІР°РµРј РёРјСЏ РїСЂРѕС†РµСЃСЃР° РґР»СЏ С„РёР»СЊС‚СЂР°С†РёРё
 				wstring temp1(temp.begin(), temp.end());
 				enter_procname = temp1;
 				arg_flag = 1;
 			} else
 
-			if ((string(argv[i]) == "-f" || string(argv[i]) == "--filter") && i < argc - 1)  // фильтры winpcap
+			if ((string(argv[i]) == "-f" || string(argv[i]) == "--filter") && i < argc - 1)  // С„РёР»СЊС‚СЂС‹ winpcap
 			{
 				filter_flag = 1;
 				arg_flag = 1;
@@ -309,24 +309,24 @@ int main(int argc, char *argv[])
 
 			if (argv[i][0] == '-' || (argv[i][0] != '-' && (arg_flag == 0 || arg_flag > 1) && i > 0))
 				error_exit(10);                    
-			else                                    // сообщение об ошибке, если введённый аргумент некорректен
+			else                                    // СЃРѕРѕР±С‰РµРЅРёРµ РѕР± РѕС€РёР±РєРµ, РµСЃР»Рё РІРІРµРґС‘РЅРЅС‹Р№ Р°СЂРіСѓРјРµРЅС‚ РЅРµРєРѕСЂСЂРµРєС‚РµРЅ
 				arg_flag = 2;
 		}
 	}
 
 
-	// сохранение и/или вывод перечня IP-адресов в консоль (в диалоговом режиме)
+	// СЃРѕС…СЂР°РЅРµРЅРёРµ Рё/РёР»Рё РІС‹РІРѕРґ РїРµСЂРµС‡РЅСЏ IP-Р°РґСЂРµСЃРѕРІ РІ РєРѕРЅСЃРѕР»СЊ (РІ РґРёР°Р»РѕРіРѕРІРѕРј СЂРµР¶РёРјРµ)
 
 	count = print_ifaces(iface_name, iface_ip, argc, 0);  
 
 
-	// выполняется при запуске программы в диалоговом режиме (по щелчку на файл)
+	// РІС‹РїРѕР»РЅСЏРµС‚СЃСЏ РїСЂРё Р·Р°РїСѓСЃРєРµ РїСЂРѕРіСЂР°РјРјС‹ РІ РґРёР°Р»РѕРіРѕРІРѕРј СЂРµР¶РёРјРµ (РїРѕ С‰РµР»С‡РєСѓ РЅР° С„Р°Р№Р»)
 	
 	if (argc <= 1)
 	{
 		cout << endl << "Please, enter the number of interface: ";
 
-		// выбор интерфейса в консоли
+		// РІС‹Р±РѕСЂ РёРЅС‚РµСЂС„РµР№СЃР° РІ РєРѕРЅСЃРѕР»Рё
 
 		do
 		{
@@ -335,16 +335,16 @@ int main(int argc, char *argv[])
 	}
 
 
-	// открываем хэндл для захвата пакетов с выбранного интерфейса
+	// РѕС‚РєСЂС‹РІР°РµРј С…СЌРЅРґР» РґР»СЏ Р·Р°С…РІР°С‚Р° РїР°РєРµС‚РѕРІ СЃ РІС‹Р±СЂР°РЅРЅРѕРіРѕ РёРЅС‚РµСЂС„РµР№СЃР°
 
 	handle = pcap_open_live(iface_name[iface_num - '0'].c_str(), 65535, 1, 1, &errbuf[0]);
 	if (handle == NULL)
 		error_exit(2);
 
-	ip_dev = iface_ip[iface_num - '0'];             // сохранили IP-адрес выбранного интерфейса
+	ip_dev = iface_ip[iface_num - '0'];             // СЃРѕС…СЂР°РЅРёР»Рё IP-Р°РґСЂРµСЃ РІС‹Р±СЂР°РЅРЅРѕРіРѕ РёРЅС‚РµСЂС„РµР№СЃР°
 
 
-	// выпонляется при запуске программы в диалоговом режиме (по щелчку на файл)
+	// РІС‹РїРѕРЅР»СЏРµС‚СЃСЏ РїСЂРё Р·Р°РїСѓСЃРєРµ РїСЂРѕРіСЂР°РјРјС‹ РІ РґРёР°Р»РѕРіРѕРІРѕРј СЂРµР¶РёРјРµ (РїРѕ С‰РµР»С‡РєСѓ РЅР° С„Р°Р№Р»)
 	
 	if (argc <= 1)
 	{
@@ -353,16 +353,16 @@ int main(int argc, char *argv[])
 		do
 		{
 			num = _getche();
-		} while (num != 'y' && num != 'n');             // захват пакетов по определённому процессу (y) или нет (n)
+		} while (num != 'y' && num != 'n');            // Р·Р°С…РІР°С‚ РїР°РєРµС‚РѕРІ РїРѕ РѕРїСЂРµРґРµР»С‘РЅРЅРѕРјСѓ РїСЂРѕС†РµСЃСЃСѓ (y) РёР»Рё РЅРµС‚ (n)
 
 		if (num == 'y')
 		{
 			cout << endl << endl << "Please, enter name of the process (for example, chrome.exe)";
 			cout << endl << "or if you want to capture all non-process related traffic, type Unknown process: ";
-			getline(wcin, enter_procname);		        // если (y), считываем с консоли имя процесса
-		}                                               // оно должно быть точь-в-точь, как в выводе netstat
-														// для захвата трафика, не связанного с процессами, необходимо
-														// ввести строку Unknown process
+			getline(wcin, enter_procname);		// РµСЃР»Рё (y), СЃС‡РёС‚С‹РІР°РµРј СЃ РєРѕРЅСЃРѕР»Рё РёРјСЏ РїСЂРѕС†РµСЃСЃР°
+		}                                               // РѕРЅРѕ РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ С‚РѕС‡СЊ-РІ-С‚РѕС‡СЊ, РєР°Рє РІ РІС‹РІРѕРґРµ netstat
+								// РґР»СЏ Р·Р°С…РІР°С‚Р° С‚СЂР°С„РёРєР°, РЅРµ СЃРІСЏР·Р°РЅРЅРѕРіРѕ СЃ РїСЂРѕС†РµСЃСЃР°РјРё, РЅРµРѕР±С…РѕРґРёРјРѕ
+								// РІРІРµСЃС‚Рё СЃС‚СЂРѕРєСѓ Unknown process
 
 
 		cout << "\n\n\n\n" << "Use winpcap-filters? (y/n): ";
@@ -370,7 +370,7 @@ int main(int argc, char *argv[])
 		do
 		{
 			num = _getche();
-		} while (num != 'y' && num != 'n');             // будет ввод выражения winpcap-фильтра (y) или нет (n)
+		} while (num != 'y' && num != 'n');             // Р±СѓРґРµС‚ РІРІРѕРґ РІС‹СЂР°Р¶РµРЅРёСЏ winpcap-С„РёР»СЊС‚СЂР° (y) РёР»Рё РЅРµС‚ (n)
 
 		if (num == 'y')
 		{
@@ -383,21 +383,21 @@ int main(int argc, char *argv[])
 
 	if (filter_flag == 1)
 	{
-		if (pcap_compile(handle, &fp, wpcap_filter.c_str(), 0, ip_dev) == -1)  // компилируем winpcap-фильтр
+		if (pcap_compile(handle, &fp, wpcap_filter.c_str(), 0, ip_dev) == -1)  // РєРѕРјРїРёР»РёСЂСѓРµРј winpcap-С„РёР»СЊС‚СЂ
 			error_exit(8);
 
-		if (pcap_setfilter(handle, &fp) == -1)                                 // устанавливаем winpcap-фильтр
+		if (pcap_setfilter(handle, &fp) == -1)                                 // СѓСЃС‚Р°РЅР°РІР»РёРІР°РµРј winpcap-С„РёР»СЊС‚СЂ
 			error_exit(9);
 	}
 
 
-	HANDLE hInput = GetStdHandle(STD_INPUT_HANDLE);    // отключаем режим быстрого редактирования в консоли
+	HANDLE hInput = GetStdHandle(STD_INPUT_HANDLE);    // РѕС‚РєР»СЋС‡Р°РµРј СЂРµР¶РёРј Р±С‹СЃС‚СЂРѕРіРѕ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёСЏ РІ РєРѕРЅСЃРѕР»Рё
 	DWORD prevConsoleMode;
 	GetConsoleMode(hInput, &prevConsoleMode);
 	SetConsoleMode(hInput, prevConsoleMode & ENABLE_EXTENDED_FLAGS);
 
 	
-	// выпонляется при запуске программы в диалоговом режиме (по щелчку на файл)
+	// РІС‹РїРѕРЅР»СЏРµС‚СЃСЏ РїСЂРё Р·Р°РїСѓСЃРєРµ РїСЂРѕРіСЂР°РјРјС‹ РІ РґРёР°Р»РѕРіРѕРІРѕРј СЂРµР¶РёРјРµ (РїРѕ С‰РµР»С‡РєСѓ РЅР° С„Р°Р№Р»)
 	
 	if (argc <= 1)
 	{
@@ -405,46 +405,46 @@ int main(int argc, char *argv[])
 		cout << "2. Quiet mode. Only write to pcap file" << endl << endl;
 		cout << "Please, select the mode: ";
 
-		do                                          // выбор режима работы программы
+		do                                          // РІС‹Р±РѕСЂ СЂРµР¶РёРјР° СЂР°Р±РѕС‚С‹ РїСЂРѕРіСЂР°РјРјС‹
 		{
 			num = _getche();
 		} while (num != '1' && num != '2');
 	}
 
 
-	string filename;                                // для хранения имени pcap-файла
-	SYSTEMTIME lt;                                  // для хранения временной отметки
+	string filename;                                // РґР»СЏ С…СЂР°РЅРµРЅРёСЏ РёРјРµРЅРё pcap-С„Р°Р№Р»Р°
+	SYSTEMTIME lt;                                  // РґР»СЏ С…СЂР°РЅРµРЅРёСЏ РІСЂРµРјРµРЅРЅРѕР№ РѕС‚РјРµС‚РєРё
 
-	GetLocalTime(&lt);                              // получаем временную отметку для имени pcap-файла
+	GetLocalTime(&lt);                              // РїРѕР»СѓС‡Р°РµРј РІСЂРµРјРµРЅРЅСѓСЋ РѕС‚РјРµС‚РєСѓ РґР»СЏ РёРјРµРЅРё pcap-С„Р°Р№Р»Р°
 
 	filename = to_string(lt.wYear) + "-" + to_string(lt.wMonth) + "-" + to_string(lt.wDay) + "-" +
-		to_string(time(0)) + ".pcap";               // создали имя файла
+		to_string(time(0)) + ".pcap";               // СЃРѕР·РґР°Р»Рё РёРјСЏ С„Р°Р№Р»Р°
 
-	pcap_dumper_t* file = pcap_dump_open(handle, filename.c_str());     // создаем pcap-файл для записи пакетов
+	pcap_dumper_t* file = pcap_dump_open(handle, filename.c_str());     // СЃРѕР·РґР°РµРј pcap-С„Р°Р№Р» РґР»СЏ Р·Р°РїРёСЃРё РїР°РєРµС‚РѕРІ
 	if (file == NULL)
 		error_exit(3);
 
 
-	setPrivilege();                     // повышаем привилегии до отладочных (для доступа ко всем процессам)
+	setPrivilege();                     // РїРѕРІС‹С€Р°РµРј РїСЂРёРІРёР»РµРіРёРё РґРѕ РѕС‚Р»Р°РґРѕС‡РЅС‹С… (РґР»СЏ РґРѕСЃС‚СѓРїР° РєРѕ РІСЃРµРј РїСЂРѕС†РµСЃСЃР°Рј)
 
 
-	thread thr2(threadFunction2);       // запускаем поток, который отслеживает остановку захвата пользователем
+	thread thr2(threadFunction2);       // Р·Р°РїСѓСЃРєР°РµРј РїРѕС‚РѕРє, РєРѕС‚РѕСЂС‹Р№ РѕС‚СЃР»РµР¶РёРІР°РµС‚ РѕСЃС‚Р°РЅРѕРІРєСѓ Р·Р°С…РІР°С‚Р° РїРѕР»СЊР·РѕРІР°С‚РµР»РµРј
 
-	thr2.detach();                      // поток работает параллельно
+	thr2.detach();                      // РїРѕС‚РѕРє СЂР°Р±РѕС‚Р°РµС‚ РїР°СЂР°Р»Р»РµР»СЊРЅРѕ
 
 	
 	cout << "\n\n\n\n" << "Start packet capture...  [ TO STOP capture PRESS <ENTER> ]" << "\n\n";
 	
-	if (PCAP_ERROR == pcap_loop(handle, -1, process_packet, (unsigned char*)file))    // начинаем захват пакетов
+	if (PCAP_ERROR == pcap_loop(handle, -1, process_packet, (unsigned char*)file))    // РЅР°С‡РёРЅР°РµРј Р·Р°С…РІР°С‚ РїР°РєРµС‚РѕРІ
 		error_exit(7);
 
 
-	if (capture_packets == 0)                               // выводим информацию, если не был захвачен ни один пакет
+	if (capture_packets == 0)                               // РІС‹РІРѕРґРёРј РёРЅС„РѕСЂРјР°С†РёСЋ, РµСЃР»Рё РЅРµ Р±С‹Р» Р·Р°С…РІР°С‡РµРЅ РЅРё РѕРґРёРЅ РїР°РєРµС‚
 		print_summary(capture_packets, saved_packets);
 
-	pcap_close(handle);                                     // закрываем хэндл
+	pcap_close(handle);                                     // Р·Р°РєСЂС‹РІР°РµРј С…СЌРЅРґР»
 
-	SetConsoleMode(hInput, prevConsoleMode);                // возврат прежних настроек консоли	
+	SetConsoleMode(hInput, prevConsoleMode);                // РІРѕР·РІСЂР°С‚ РїСЂРµР¶РЅРёС… РЅР°СЃС‚СЂРѕРµРє РєРѕРЅСЃРѕР»Рё	
 	
 	while (true) cin.get();
 	
